@@ -22,7 +22,7 @@ import expenseRouter from './routes/expenseRoute.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5011;
 
 // Connect Database
 connectDB();
