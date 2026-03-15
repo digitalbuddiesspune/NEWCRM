@@ -1,0 +1,65 @@
+import mongoose from 'mongoose';
+
+const clientSchema = new mongoose.Schema({
+  clientName: {
+    type: String,
+    required: true,
+  },
+  clientNumber: {
+    type: String,
+    required: true,
+  },
+  mailId: {
+    type: String,
+    required: true,
+  },
+  businessType: {
+    type: String,
+    required: true,
+  },
+  services: [{
+    type: String,
+  }],
+  date: {
+    type: Date,
+    required: true,
+  },
+  clientType: {
+    type: String,
+    enum: ['Recurring', 'Non Recurring'],
+    required: true,
+  },
+  projectEndDate: {
+    type: Date,
+    required: function () {
+      return this.clientType === 'Non Recurring';
+    },
+  },
+  address: {
+    type: String,
+  },
+  gstin: { type: String, default: '' },
+  gstCode: { type: String, default: '' },
+  onboardBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Employee',
+    required: true,
+  },
+  mouLink: {
+    type: String,
+  },
+  mouSentBy: {
+    type: String,
+  },
+  mouSentTo: {
+    type: String,
+  },
+  status: {
+    type: String,
+    enum: ['Active', 'Inactive'],
+    default: 'Active',
+  },
+}, { timestamps: true });
+
+const Client = mongoose.model('Client', clientSchema);
+export default Client;

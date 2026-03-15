@@ -1,0 +1,99 @@
+import { createBrowserRouter, Navigate } from 'react-router-dom'
+import App from '../App'
+import Login from '../pages/Login'
+import RequireAuth from '../components/RequireAuth'
+import DashboardView from '../components/views/DashboardView'
+import ClientsView from '../components/views/ClientsView'
+import CampaignsView from '../components/views/CampaignsView'
+import LeadsView from '../components/views/LeadsView'
+import ProjectsView from '../components/views/ProjectsView'
+import MyProjectsView from '../components/views/MyProjectsView'
+import ReportsView from '../components/views/ReportsView'
+import TasksView from '../components/views/TasksView'
+import CalendarView from '../components/views/CalendarView'
+import SocialCalendarView from '../components/views/SocialCalendarView'
+import EmployeesView from '../components/views/EmployeesView'
+import AddEmployee from '../pages/AddEmployee'
+import AddClient from '../pages/AddClient'
+import AddProject from '../pages/AddProject'
+import Placeholder from '../pages/Placeholder'
+import SalariesView from '../components/views/SalariesView'
+import AddSalary from '../pages/AddSalary'
+import AttendanceView from '../components/views/AttendanceView'
+import AddLead from '../pages/AddLead'
+import Settings from '../pages/Settings'
+import AssignTask from '../pages/AssignTask'
+import CollaboratorsView from '../components/views/CollaboratorsView'
+import AddCollaborator from '../pages/AddCollaborator'
+import LeaveView from '../components/views/LeaveView'
+import BillingView from '../components/views/BillingView'
+import RevenueView from '../components/views/RevenueView'
+import ExpensesView from '../components/views/ExpensesView'
+import AddExpense from '../pages/AddExpense'
+import AddBilling from '../pages/AddBilling'
+import InvoicePage from '../pages/InvoicePage'
+import CompaniesView from '../components/views/CompaniesView'
+import AddCompany from '../pages/AddCompany'
+
+const router = createBrowserRouter([
+    {
+        path: '/',
+        element: (
+            <RequireAuth>
+                <App />
+            </RequireAuth>
+        ),
+        children: [
+            { index: true, element: <Navigate to='/dashboard' replace /> },
+            { path: 'dashboard', element: <DashboardView /> },
+            { path: 'admin-dashboard', element: <DashboardView /> },
+            { path: 'clients', element: <ClientsView /> },
+            { path: 'add-client', element: <AddClient /> },
+            { path: 'clients/edit/:id', element: <AddClient /> },
+            { path: 'companies', element: <CompaniesView /> },
+            { path: 'add-company', element: <AddCompany /> },
+            { path: 'companies/edit/:id', element: <AddCompany /> },
+            { path: 'collaborators', element: <CollaboratorsView /> },
+            { path: 'add-collaborator', element: <AddCollaborator /> },
+            { path: 'collaborators/edit/:id', element: <AddCollaborator /> },
+            { path: 'campaigns', element: <CampaignsView /> },
+            { path: 'leads', element: <LeadsView /> },
+            { path: 'add-lead', element: <AddLead /> },
+            { path: 'leads/edit/:id', element: <AddLead /> },
+            { path: 'projects', element: <ProjectsView /> },
+            { path: 'my-projects', element: <MyProjectsView /> },
+            { path: 'add-project', element: <AddProject /> },
+            { path: 'projects/edit/:id', element: <AddProject /> },
+            { path: 'assign-task', element: <AssignTask /> },
+            { path: 'reports', element: <ReportsView /> },
+            { path: 'tasks', element: <TasksView /> },
+            { path: 'my-tasks', element: <TasksView isMyTasks /> },
+            { path: 'calendar', element: <CalendarView /> },
+            { path: 'social-calendar', element: <SocialCalendarView /> },
+            // HR placeholders
+            { path: 'employees', element: <EmployeesView /> },
+            { path: 'add-employee', element: <AddEmployee /> },
+            { path: 'employees/edit/:id', element: <AddEmployee /> },
+            { path: 'salaries', element: <SalariesView /> },
+            { path: 'add-salary', element: <AddSalary /> },
+            { path: 'billings', element: <BillingView /> },
+            { path: 'revenue', element: <RevenueView /> },
+            { path: 'expenses', element: <ExpensesView /> },
+            { path: 'add-expense', element: <AddExpense /> },
+            { path: 'expenses/edit/:id', element: <AddExpense /> },
+            { path: 'add-billing', element: <AddBilling /> },
+            { path: 'billings/edit/:id', element: <AddBilling /> },
+            { path: 'billings/:id/invoice', element: <InvoicePage /> },
+            { path: 'attendance', element: <AttendanceView /> },
+            { path: 'leave', element: <LeaveView /> },
+            { path: 'lead-management', element: <LeadsView /> },
+            { path: 'settings', element: <Settings /> },
+        ],
+    },
+    {
+        path: '/login',
+        element: <Login />,
+    },
+])
+
+export default router

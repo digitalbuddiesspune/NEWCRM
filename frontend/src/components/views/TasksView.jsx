@@ -1,0 +1,446 @@
+import React, { useEffect, useState } from 'react'
+import api from '../../api/axios'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+
+const TasksView = ({ isMyTasks = false }) => {
+  const { user, canAssignTask } = useAuth()
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filterProject, setFilterProject] = useState('')
+  const [filterStatus, setFilterStatus] = useState('All')
+  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [filterAssignee, setFilterAssignee] = useState('')
+  const [projects, setProjects] = useState([])
+  const [employees, setEmployees] = useState([])
+  const navigate = useNavigate()
+
+  const fetchTasks = async () => {
+    try {
+      const params = {}
+      if (isMyTasks && user?._id) {
+        params.employeeId = user._id
+      } else if (canAssignTask()) {
+        if (filterProject) params.projectId = filterProject
+        if (filterAssignee) params.employeeId = filterAssignee
+      } else if (user?._id) {
+        params.employeeId = user._id
+      }
+      const res = await api.get('/tasks', { params })
+      setTasks(Array.isArray(res.data) ? res.data : [])
+    } catch (err) {
+      console.error('Failed to fetch tasks:', err)
+      setTasks([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchProjects = async () => {
+    try {
+      const res = await api.get('/projects')
+      const list = Array.isArray(res.data) ? res.data : res.data?.data || res.data?.projects || []
+      setProjects(Array.isArray(list) ? list : [])
+    } catch (err) {
+      console.error('Failed to fetch projects:', err)
+    }
+  }
+
+  useEffect(() => {
+    if (canAssignTask() || user?._id) fetchTasks()
+  }, [filterProject, filterAssignee, canAssignTask, user?._id, isMyTasks])
+
+  useEffect(() => {
+    if (canAssignTask() && !isMyTasks) {
+      fetchProjects()
+      const fetchEmployees = async () => {
+        try {
+          const res = await api.get('/employees')
+          const list = Array.isArray(res.data) ? res.data : res.data?.data || []
+          setEmployees(Array.isArray(list) ? list : [])
+        } catch (err) {
+          console.error('Failed to fetch employees:', err)
+        }
+      }
+      fetchEmployees()
+    }
+  }, [canAssignTask, isMyTasks])
+
+  const filteredTasks = tasks.filter((t) => {
+    if (filterStatus !== 'All' && t.status !== filterStatus) return false
+    if ((isMyTasks || !canAssignTask()) && filterProject) {
+      const projectId = t.project?._id || t.project
+      if (projectId !== filterProject) return false
+    }
+    if (filterDate) {
+      if (!t.dueDate) return false
+      const taskDate = new Date(t.dueDate).toISOString().slice(0, 10)
+      if (taskDate !== filterDate) return false
+    }
+    return true
+  })
+
+  const uniqueProjectsFromTasks = Array.from(
+    new Map(
+      tasks
+        .filter((t) => t.project)
+        .map((t) => {
+          const p = t.project
+          const id = p._id || p
+          return [id, { _id: id, projectName: p.projectName || 'Project' }]
+        })
+    ).values()
+  )
+
+  const totalTasks = filteredTasks.length
+  const completedTasks = filteredTasks.filter((t) => t.status === 'Completed').length
+  const inProgressTasks = filteredTasks.filter((t) => t.status === 'In Progress').length
+  const pendingTasks = filteredTasks.filter((t) => t.status === 'Pending').length
+  const overdueTasks = filteredTasks.filter((t) => {
+    if (!t.dueDate || t.status === 'Completed') return false
+    return new Date(t.dueDate) < new Date(new Date().toDateString())
+  }).length
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case 'Urgent': return 'bg-red-100 text-red-800'
+      case 'High': return 'bg-orange-100 text-orange-800'
+      case 'Medium': return 'bg-yellow-100 text-yellow-800'
+      default: return 'bg-green-100 text-green-800'
+    }
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Completed': return 'bg-green-100 text-green-800'
+      case 'In Progress': return 'bg-blue-100 text-blue-800'
+      case 'Cancelled': return 'bg-gray-100 text-gray-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const [viewTask, setViewTask] = useState(null)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
+
+  const taskStatusToSocialStatus = (status) => {
+    if (status === 'Completed') return 'Published'
+    if (status === 'Cancelled') return 'Cancelled'
+    return 'Scheduled' // Pending, In Progress
+  }
+
+  const canUpdateTaskStatus = (task) => {
+    if (!task || !user?._id) return false
+    if (task.source === 'social_media') return true
+    const assigneeId = task.assignedTo?._id || task.assignedTo
+    return assigneeId === user._id || canAssignTask()
+  }
+
+  const handleStatusChange = async (task, newStatus) => {
+    const taskId = task._id
+    if (!taskId || !newStatus) return
+    setUpdatingStatus(true)
+    try {
+      if (task.source === 'social_media' && task.clientId && task.postId) {
+        const socialStatus = taskStatusToSocialStatus(newStatus)
+        await api.put(`/social-calendars/client/${task.clientId}/posts/${task.postId}`, {
+          status: socialStatus,
+        })
+        setViewTask((prev) => (prev?._id === taskId ? { ...prev, status: newStatus } : prev))
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.source === 'social_media' && t.clientId === task.clientId && t.postId === task.postId) return { ...t, status: newStatus }
+            if (t._id === taskId) return { ...t, status: newStatus }
+            return t
+          })
+        )
+      } else {
+        const res = await api.put(`/tasks/${taskId}`, { status: newStatus })
+        setViewTask((prev) => res.data?.task || prev)
+        setTasks((prev) =>
+          prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t))
+        )
+      }
+    } catch (err) {
+      console.error('Failed to update task status:', err)
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  const STATUS_OPTIONS = ['Pending', 'In Progress', 'Completed', 'Cancelled']
+
+  return (
+    <div className='p-8'>
+      <div className='mb-8 flex justify-between items-center'>
+        <div>
+          <h1 className='text-sm font-bold text-gray-900'>
+            {isMyTasks ? 'My Tasks' : canAssignTask() ? 'Tasks' : 'My Tasks'}
+          </h1>
+          <p className='text-sm text-gray-600 mt-2'>
+            {isMyTasks
+              ? 'Tasks assigned to you by project managers and team leads.'
+              : canAssignTask()
+              ? 'Manage team tasks and deadlines.'
+              : 'Tasks assigned to you by project managers and team leads.'}
+          </p>
+        </div>
+        {canAssignTask() && !isMyTasks && (
+          <button
+            onClick={() => navigate('/assign-task')}
+            className='bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-semibold transition-colors'
+          >
+            + New Task
+          </button>
+        )}
+      </div>
+
+      <div className='grid grid-cols-1 md:grid-cols-4 gap-6 mb-8'>
+        <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-indigo-500'>
+          <p className='text-gray-600 text-sm font-medium'>Total Tasks</p>
+          <h3 className='text-sm font-bold text-gray-900 mt-2'>{totalTasks}</h3>
+          <p className='text-xs text-gray-600 mt-2'>{pendingTasks} pending, {inProgressTasks} in progress</p>
+        </div>
+        <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-green-500'>
+          <p className='text-gray-600 text-sm font-medium'>Completed</p>
+          <h3 className='text-sm font-bold text-gray-900 mt-2'>{completedTasks}</h3>
+          <p className='text-xs text-green-600 mt-2'>
+            {totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0}% completion
+          </p>
+        </div>
+        <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-orange-500'>
+          <p className='text-gray-600 text-sm font-medium'>Overdue</p>
+          <h3 className='text-sm font-bold text-gray-900 mt-2'>{overdueTasks}</h3>
+          <p className='text-xs text-orange-600 mt-2'>Attention needed</p>
+        </div>
+        <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-red-500'>
+          <p className='text-gray-600 text-sm font-medium'>Urgent</p>
+          <h3 className='text-sm font-bold text-gray-900 mt-2'>
+            {filteredTasks.filter((t) => t.priority === 'Urgent').length}
+          </h3>
+          <p className='text-xs text-red-600 mt-2'>High priority</p>
+        </div>
+      </div>
+
+      <div className='mb-6 flex flex-wrap items-center gap-4'>
+        <div className='flex items-center gap-2'>
+          <label className='text-sm font-medium text-gray-700'>Date</label>
+          <input
+            type='date'
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+          />
+          <button
+            type='button'
+            onClick={() => setFilterDate('')}
+            className='px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg'
+          >
+            All
+          </button>
+        </div>
+        <div className='flex items-center gap-2'>
+          <label className='text-sm font-medium text-gray-700'>Project</label>
+            <select
+              value={filterProject}
+              onChange={(e) => setFilterProject(e.target.value)}
+              className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'>
+              <option value=''>All Projects</option>
+              {(canAssignTask() && !isMyTasks ? [{ _id: 'social-media', projectName: 'Social Media' }, ...projects] : uniqueProjectsFromTasks).map((p) => (
+                <option key={p._id} value={p._id}>{p.projectName}</option>
+              ))}
+          </select>
+        </div>
+        {canAssignTask() && !isMyTasks && (
+          <div className='flex items-center gap-2'>
+            <label className='text-sm font-medium text-gray-700'>Assignee</label>
+            <select
+              value={filterAssignee}
+              onChange={(e) => setFilterAssignee(e.target.value)}
+              className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[160px]'>
+              <option value=''>All Assignees</option>
+              {employees.map((emp) => (
+                <option key={emp._id} value={emp._id}>{emp.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div className='flex items-center gap-2'>
+          <label className='text-sm font-medium text-gray-700'>Status</label>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'>
+            <option value='All'>All</option>
+            <option value='Pending'>Pending</option>
+            <option value='In Progress'>In Progress</option>
+            <option value='Completed'>Completed</option>
+            <option value='Cancelled'>Cancelled</option>
+          </select>
+        </div>
+      </div>
+
+      <div className='bg-white rounded-lg shadow-md overflow-hidden'>
+        <table className='w-full'>
+          <thead className='bg-gray-100 border-b border-gray-200'>
+            <tr>
+              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Task</th>
+              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Project</th>
+              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Assignee</th>
+              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Due Date</th>
+              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Priority</th>
+              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className='py-12 text-center text-sm text-gray-500'>Loading...</td>
+              </tr>
+            ) : filteredTasks.length === 0 ? (
+              <tr>
+                <td colSpan={6} className='py-12 text-center text-sm text-gray-500'>No tasks found</td>
+              </tr>
+            ) : (
+              filteredTasks.map((task) => (
+                <tr
+                  key={task._id}
+                  onClick={() => setViewTask(task)}
+                  className='border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer'
+                >
+                  <td className='py-4 px-6'>
+                    <p className='text-sm font-medium text-gray-900'>{task.title}</p>
+                    {task.description && (
+                      <p className='text-sm text-gray-500 mt-0.5 line-clamp-1'>{task.description}</p>
+                    )}
+                  </td>
+                  <td className='py-4 px-6 text-gray-700 text-sm'>
+                    {task.project?.projectName || '—'}
+                  </td>
+                  <td className='py-4 px-6'>
+                    <div className='flex items-center gap-2'>
+                      <div className='w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white text-xs font-bold'>
+                        {(task.assignedTo?.name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                      </div>
+                      <span className='text-sm text-gray-900'>{task.assignedTo?.name || '—'}</span>
+                    </div>
+                  </td>
+                  <td className='py-4 px-6 text-gray-700 text-sm'>
+                    {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'}
+                  </td>
+                  <td className='py-4 px-6'>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>
+                      {task.priority}
+                    </span>
+                  </td>
+                  <td className='py-4 px-6'>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
+                      {task.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* View Task Popup */}
+      {viewTask && (
+        <div
+          className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'
+          onClick={() => setViewTask(null)}
+        >
+          <div
+            className='bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className='flex justify-between items-start mb-4'>
+              <h3 className='text-sm font-bold text-gray-900'>{viewTask.title}</h3>
+              <button
+                onClick={() => setViewTask(null)}
+                className='p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+              >
+                <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+                </svg>
+              </button>
+            </div>
+
+            {viewTask.description && (
+              <div className='mb-4'>
+                <p className='text-sm font-medium text-gray-500 mb-1'>Description</p>
+                <p className='text-sm text-gray-700 whitespace-pre-wrap'>{viewTask.description}</p>
+              </div>
+            )}
+
+            <div className='space-y-3'>
+              <div className='flex justify-between items-center py-2 border-b border-gray-100'>
+                <span className='text-sm text-gray-500'>Project</span>
+                <span className='text-sm font-medium text-gray-900'>
+                  {viewTask.project?.projectName || '—'}
+                  {viewTask.source === 'social_media' && viewTask.clientName && ` (${viewTask.clientName})`}
+                </span>
+              </div>
+              <div className='flex justify-between items-center py-2 border-b border-gray-100'>
+                <span className='text-sm text-gray-500'>Assigned To</span>
+                <span className='text-sm font-medium text-gray-900'>{viewTask.assignedTo?.name || '—'}</span>
+              </div>
+              <div className='flex justify-between items-center py-2 border-b border-gray-100'>
+                <span className='text-sm text-gray-500'>Assigned By</span>
+                <span className='text-sm font-medium text-gray-900'>{viewTask.assignedBy?.name || '—'}</span>
+              </div>
+              <div className='flex justify-between items-center py-2 border-b border-gray-100'>
+                <span className='text-sm text-gray-500'>Status</span>
+                {canUpdateTaskStatus(viewTask) ? (
+                  <select
+                    value={viewTask.status}
+                    onChange={(e) => handleStatusChange(viewTask, e.target.value)}
+                    disabled={updatingStatus}
+                    className='text-sm font-semibold rounded-lg px-2 py-1 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50'
+                  >
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(viewTask.status)}`}>
+                    {viewTask.status}
+                  </span>
+                )}
+              </div>
+              <div className='flex justify-between items-center py-2 border-b border-gray-100'>
+                <span className='text-sm text-gray-500'>Priority</span>
+                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(viewTask.priority)}`}>
+                  {viewTask.priority}
+                </span>
+              </div>
+              <div className='flex justify-between items-center py-2 border-b border-gray-100'>
+                <span className='text-sm text-gray-500'>Due Date</span>
+                <span className='text-sm font-medium text-gray-900'>
+                  {viewTask.dueDate ? new Date(viewTask.dueDate).toLocaleDateString() : '—'}
+                </span>
+              </div>
+              <div className='flex justify-between items-center py-2'>
+                <span className='text-sm text-gray-500'>Created</span>
+                <span className='text-sm text-gray-700'>
+                  {viewTask.createdAt ? new Date(viewTask.createdAt).toLocaleString() : '—'}
+                </span>
+              </div>
+            </div>
+
+            <div className='mt-6 pt-4 border-t border-gray-200'>
+              <button
+                onClick={() => setViewTask(null)}
+                className='w-full py-2 px-4 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50'
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default TasksView
