@@ -34,44 +34,30 @@ const InvoicePage = () => {
     window.print()
   }
 
-  /** Replace oklch() and other unsupported color functions so html2canvas can parse CSS */
+  /** Replace oklch() and other unsupported color functions so html2canvas can parse CSS (case-insensitive for production builds) */
   const stripUnsupportedColors = (cssText) => {
     if (!cssText || typeof cssText !== 'string') return cssText
     let out = cssText
-    while (out.includes('oklch(')) {
-      const idx = out.indexOf('oklch(')
-      let depth = 1
-      let end = idx + 6
-      while (depth > 0 && end < out.length) {
-        if (out[end] === '(') depth++
-        else if (out[end] === ')') depth--
-        end++
+    const replaceParenFunc = (name, replacement) => {
+      const re = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\(', 'gi')
+      let match
+      while ((match = re.exec(out)) !== null) {
+        const idx = match.index
+        const start = out.indexOf('(', idx)
+        let depth = 1
+        let end = start + 1
+        while (depth > 0 && end < out.length) {
+          if (out[end] === '(') depth++
+          else if (out[end] === ')') depth--
+          end++
+        }
+        out = out.slice(0, idx) + replacement + out.slice(end)
+        re.lastIndex = 0
       }
-      out = out.slice(0, idx) + 'rgb(128,128,128)' + out.slice(end)
     }
-    while (out.includes('oklab(')) {
-      const idx = out.indexOf('oklab(')
-      let depth = 1
-      let end = idx + 6
-      while (depth > 0 && end < out.length) {
-        if (out[end] === '(') depth++
-        else if (out[end] === ')') depth--
-        end++
-      }
-      out = out.slice(0, idx) + 'rgb(128,128,128)' + out.slice(end)
-    }
-    // color-mix() can have nested parens; simple replace for first level
-    while (out.includes('color-mix(')) {
-      const idx = out.indexOf('color-mix(')
-      let depth = 1
-      let end = idx + 10
-      while (depth > 0 && end < out.length) {
-        if (out[end] === '(') depth++
-        else if (out[end] === ')') depth--
-        end++
-      }
-      out = out.slice(0, idx) + 'rgb(128,128,128)' + out.slice(end)
-    }
+    replaceParenFunc('oklch', 'rgb(128,128,128)')
+    replaceParenFunc('oklab', 'rgb(128,128,128)')
+    replaceParenFunc('color-mix', 'rgb(128,128,128)')
     return out
   }
 
@@ -81,6 +67,17 @@ const InvoicePage = () => {
     setDownloading(true)
     setDownloadError(null)
     try {
+      // In production, CSS is often loaded via <link>; fetch and strip oklch so the clone never parses it
+      let strippedLinkedCss = ''
+      const links = document.querySelectorAll('link[rel="stylesheet"]')
+      if (links.length > 0) {
+        const hrefs = Array.from(links).map((l) => l.href).filter(Boolean)
+        const texts = await Promise.all(
+          hrefs.map((h) => fetch(h).then((r) => r.text()).catch(() => ''))
+        )
+        strippedLinkedCss = texts.map(stripUnsupportedColors).join('\n')
+      }
+
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
@@ -88,14 +85,23 @@ const InvoicePage = () => {
         backgroundColor: '#ffffff',
         logging: false,
         onclone: (clonedDoc, clonedElement) => {
+          // Strip oklch from inline <style> tags
           clonedDoc.querySelectorAll('style').forEach((style) => {
             if (style.textContent) {
               style.textContent = stripUnsupportedColors(style.textContent)
             }
           })
+          // Replace linked stylesheets with one stripped <style> so parser never sees oklch
+          clonedDoc.querySelectorAll('link[rel="stylesheet"]').forEach((l) => l.remove())
+          if (strippedLinkedCss) {
+            const style = clonedDoc.createElement('style')
+            style.textContent = strippedLinkedCss
+            clonedDoc.head.appendChild(style)
+          }
           clonedElement.querySelectorAll('[style]').forEach((el) => {
-            if (el.getAttribute('style')?.includes('oklch')) {
-              el.setAttribute('style', stripUnsupportedColors(el.getAttribute('style')))
+            const s = el.getAttribute('style')
+            if (s && /oklch/i.test(s)) {
+              el.setAttribute('style', stripUnsupportedColors(s))
             }
           })
         },
