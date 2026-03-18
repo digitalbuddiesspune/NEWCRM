@@ -18,6 +18,7 @@ import leaveRouter from './routes/leaveRoute.js';
 import billingRouter from './routes/billingRoute.js';
 import companyRouter from './routes/companyRoute.js';
 import expenseRouter from './routes/expenseRoute.js';
+import { autoCheckoutPreviousDays } from './utils/attendanceAutoCheckout.js';
 
 dotenv.config();
 
@@ -25,7 +26,19 @@ const app = express();
 const PORT = process.env.PORT || 5011;
 
 // Connect Database
-connectDB();
+await connectDB();
+
+// Background job: auto check-out previous day's open sessions
+const runAttendanceSweeper = async () => {
+  try {
+    const { updated } = await autoCheckoutPreviousDays();
+    if (updated) console.log(`Auto checked-out ${updated} attendance record(s)`);
+  } catch (e) {
+    console.error('Attendance auto-checkout job failed:', e?.message || e);
+  }
+};
+runAttendanceSweeper();
+setInterval(runAttendanceSweeper, 5 * 60 * 1000);
 
 
 app.use(

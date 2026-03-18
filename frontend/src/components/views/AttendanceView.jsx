@@ -13,8 +13,15 @@ const formatTime = (ms) => {
 const AttendanceView = () => {
   const { user, hasFullAccess } = useAuth()
   const isHR = hasFullAccess()
+  const [activeTab, setActiveTab] = useState(() => (isHR ? 'employees' : 'my'))
+  const [employeesViewMode, setEmployeesViewMode] = useState('day') // 'day' | 'month'
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
   const [employees, setEmployees] = useState([])
-  const [attendances, setAttendances] = useState([])
+  const [attendances, setAttendances] = useState([]) // table data (day or month depending on view)
+  const [monthAttendances, setMonthAttendances] = useState([]) // always month data for employee summary
   const [selectedEmployee, setSelectedEmployee] = useState('')
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -45,6 +52,33 @@ const AttendanceView = () => {
       if (!isHR && user?._id) params.employeeId = user._id
       const res = await api.get('/attendance/by-month', { params })
       const payload = res.data
+      const rows = Array.isArray(payload) ? payload : []
+      setAttendances(rows)
+      if (isHR) setMonthAttendances(rows)
+    } catch (err) {
+      console.error('Failed to fetch attendance:', err)
+    }
+  }
+
+  const fetchMonthAttendancesForSummary = async () => {
+    if (!isHR) return
+    try {
+      const params = { month: selectedMonth }
+      const res = await api.get('/attendance/by-month', { params })
+      const payload = res.data
+      setMonthAttendances(Array.isArray(payload) ? payload : [])
+    } catch (err) {
+      console.error('Failed to fetch month attendance summary:', err)
+    }
+  }
+
+  const fetchAttendanceByDay = async () => {
+    try {
+      const params = { date: selectedDate }
+      if (!isHR && user?._id) params.employeeId = user._id
+      if (isHR && filterEmployeeId) params.employeeId = filterEmployeeId
+      const res = await api.get('/attendance/today', { params })
+      const payload = res.data
       setAttendances(Array.isArray(payload) ? payload : [])
     } catch (err) {
       console.error('Failed to fetch attendance:', err)
@@ -56,8 +90,22 @@ const AttendanceView = () => {
   }, [isHR])
 
   useEffect(() => {
-    if (isHR || user?._id) fetchAttendanceByMonth()
-  }, [isHR, user?._id, selectedMonth])
+    setActiveTab(isHR ? 'employees' : 'my')
+  }, [isHR])
+
+  useEffect(() => {
+    if (!(isHR || user?._id)) return
+    if (isHR && activeTab === 'employees' && employeesViewMode === 'day') {
+      fetchAttendanceByDay()
+    } else {
+      fetchAttendanceByMonth()
+    }
+  }, [isHR, user?._id, selectedMonth, selectedDate, activeTab, employeesViewMode, filterEmployeeId])
+
+  useEffect(() => {
+    // Keep employee summary correct even when table is in Day view
+    if (isHR && activeTab === 'employees') fetchMonthAttendancesForSummary()
+  }, [isHR, activeTab, selectedMonth])
 
   useEffect(() => {
     if (!isHR && user?._id) {
@@ -83,7 +131,7 @@ const AttendanceView = () => {
           setCheckInTime(checkInDate)
           setElapsedMs(Date.now() - checkInDate.getTime())
         }
-      } catch (e) {
+      } catch {
         localStorage.removeItem('attendance_session')
       }
     }
@@ -138,7 +186,7 @@ const AttendanceView = () => {
     (e.name || '').toLowerCase().includes(employeeSearch.toLowerCase())
   )
 
-  const getCheckInLocation = () => {
+  const getLocation = () => {
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
         resolve({ failed: true, reason: 'unsupported' })
@@ -206,7 +254,7 @@ const AttendanceView = () => {
     setLoading(true)
     setError(null)
     try {
-      const location = await getCheckInLocation()
+      const location = await getLocation()
       const hasValidLocation = !location.failed && location.latitude != null && location.longitude != null &&
         !Number.isNaN(Number(location.latitude)) && !Number.isNaN(Number(location.longitude))
       if (!hasValidLocation) {
@@ -255,7 +303,27 @@ const AttendanceView = () => {
     setLoading(true)
     setError(null)
     try {
-      await api.post('/attendance/check-out', { employee: selectedEmployee })
+      const location = await getLocation()
+      const hasValidLocation = !location.failed && location.latitude != null && location.longitude != null &&
+        !Number.isNaN(Number(location.latitude)) && !Number.isNaN(Number(location.longitude))
+      if (!hasValidLocation) {
+        const msg = location.reason === 'permission_denied'
+          ? 'Location is required to check out. Allow location for this site (click the lock icon in the address bar → Site settings → Location → Allow), then try again.'
+          : location.reason === 'timeout'
+          ? 'Location is required to check out. Request timed out—ensure device location is on and try again.'
+          : location.reason === 'unsupported'
+          ? 'Location is required to check out. Your browser does not support geolocation.'
+          : 'Location is required to check out. Enable device location and allow this site to use it, then try again.'
+        setError(msg)
+        setLoading(false)
+        return
+      }
+      await api.post('/attendance/check-out', {
+        employee: selectedEmployee,
+        latitude: Number(location.latitude),
+        longitude: Number(location.longitude),
+        ...(location.address && location.address.trim() && { address: String(location.address).trim() }),
+      })
       setCheckInTime(null)
       setElapsedMs(0)
       localStorage.removeItem('attendance_session')
@@ -278,9 +346,24 @@ const AttendanceView = () => {
     ? new Date(selectedMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
     : ''
 
-  const filteredAttendances = filterEmployeeId
+  const dateLabel = selectedDate
+    ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : ''
+
+  const filteredAttendances = filterEmployeeId && !(isHR && employeesViewMode === 'day')
     ? attendances.filter((a) => (a.employee?._id || a.employee) === filterEmployeeId)
     : attendances
+
+  const employeeMonthSummary = isHR
+    ? employees.map((emp) => {
+        const rows = monthAttendances.filter((a) => (a.employee?._id || a.employee) === emp._id)
+        const fullDays = rows.filter((r) => r.status === 'Full Day').length
+        const halfDays = rows.filter((r) => r.status === 'Half Day').length
+        const inProgress = rows.filter((r) => r.status === 'In Progress').length
+        const totalHours = rows.reduce((s, r) => s + (typeof r.durationHours === 'number' ? r.durationHours : 0), 0)
+        return { emp, fullDays, halfDays, inProgress, totalHours }
+      })
+    : []
 
   const getStatusBadge = (status) => {
     const classes = {
@@ -305,162 +388,285 @@ const AttendanceView = () => {
         </p>
       </div>
 
-      <div className='bg-white rounded-xl shadow-lg border border-gray-100 p-6 max-w-2xl mb-8'>
-        <div className='mb-4 relative' ref={employeeRef}>
-          <label className='block text-sm font-medium text-gray-700 mb-2'>Employee</label>
-          {isHR ? (
-            <>
-              <input
-                type='text'
-                value={employeeSearch}
-                onChange={(e) => {
-                  setEmployeeSearch(e.target.value)
-                  setEmployeeOpen(true)
-                  if (!e.target.value) setSelectedEmployee('')
-                }}
-                onFocus={() => setEmployeeOpen(true)}
-                placeholder='Search employee...'
-                className='w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-              />
-              {employeeOpen && (
-                <ul className='absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-xl shadow-lg py-1 max-h-48 overflow-auto'>
-                  {filteredEmployees.map((emp) => (
-                    <li
-                      key={emp._id}
-                      onClick={() => handleEmployeeSelect(emp)}
-                      className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 ${selectedEmployee === emp._id ? 'bg-blue-100' : ''}`}
-                    >
-                      {emp.name}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          ) : (
-            <div className='w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-gray-50 text-gray-700'>
-              {user?.name || '—'}
-            </div>
-          )}
-        </div>
-
-        <p className='text-xs text-gray-500 mb-2'>
-          Location is required to check in. When you click Check In, allow location access when your browser asks.
-        </p>
-        <div className='flex items-center gap-4 mb-4'>
+      {isHR && (
+        <div className='mb-6 flex flex-wrap gap-2'>
           <button
-            onClick={handleCheckIn}
-            disabled={loading || checkInTime}
-            className='px-6 py-3 bg-green-600 text-white rounded-xl font-medium text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+            onClick={() => setActiveTab('employees')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium border ${activeTab === 'employees' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
           >
-            Check In
+            Employees Attendance
           </button>
           <button
-            onClick={handleCheckOut}
-            disabled={loading || !checkInTime}
-            className='px-6 py-3 bg-red-600 text-white rounded-xl font-medium text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+            onClick={() => setActiveTab('my')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium border ${activeTab === 'my' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
           >
-            Check Out
+            Check In / Check Out
           </button>
         </div>
+      )}
 
-        {checkInTime && (
-          <div className='mt-4 p-4 bg-blue-50 rounded-xl'>
-            <p className='text-sm text-gray-600'>Time elapsed</p>
-            <p className='text-2xl font-bold text-blue-700 font-mono'>{formatTime(elapsedMs)}</p>
-          </div>
-        )}
-
-        {error && <p className='text-red-600 text-sm mt-4'>{error}</p>}
-      </div>
-
-      <div className='bg-white rounded-lg shadow overflow-x-auto'>
-        <div className='px-4 py-3 border-b flex flex-wrap items-center justify-between gap-4'>
-          <h2 className='text-lg font-bold text-gray-900'>
-            {isHR ? "Attendance" : "Your Attendance"}
-          </h2>
-          <div className='flex flex-wrap items-center gap-4'>
-            {isHR && (
-              <div className='flex items-center gap-2'>
-                <label className='text-sm font-medium text-gray-700'>Employee</label>
-                <select
-                  value={filterEmployeeId}
-                  onChange={(e) => setFilterEmployeeId(e.target.value)}
-                  className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]'
-                >
-                  <option value=''>All Employees</option>
-                  {employees.map((emp) => (
-                    <option key={emp._id} value={emp._id}>{emp.name}</option>
-                  ))}
-                </select>
+      {(activeTab === 'my' || !isHR) && (
+        <div className='bg-white rounded-xl shadow-lg border border-gray-100 p-6 max-w-2xl mb-8'>
+          <div className='mb-4 relative' ref={employeeRef}>
+            <label className='block text-sm font-medium text-gray-700 mb-2'>Employee</label>
+            {isHR ? (
+              <>
+                <input
+                  type='text'
+                  value={employeeSearch}
+                  onChange={(e) => {
+                    setEmployeeSearch(e.target.value)
+                    setEmployeeOpen(true)
+                    if (!e.target.value) setSelectedEmployee('')
+                  }}
+                  onFocus={() => setEmployeeOpen(true)}
+                  placeholder='Search employee...'
+                  className='w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                />
+                {employeeOpen && (
+                  <ul className='absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-xl shadow-lg py-1 max-h-48 overflow-auto'>
+                    {filteredEmployees.map((emp) => (
+                      <li
+                        key={emp._id}
+                        onClick={() => handleEmployeeSelect(emp)}
+                        className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 ${selectedEmployee === emp._id ? 'bg-blue-100' : ''}`}
+                      >
+                        {emp.name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <div className='w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-gray-50 text-gray-700'>
+                {user?.name || '—'}
               </div>
             )}
-            <div className='flex items-center gap-2'>
-              <label className='text-sm font-medium text-gray-700'>Month</label>
-              <input
-                type='month'
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-              />
-            </div>
           </div>
+
+          <p className='text-xs text-gray-500 mb-2'>
+            Location is required to check in. When you click Check In, allow location access when your browser asks.
+          </p>
+          <div className='flex items-center gap-4 mb-4'>
+            <button
+              onClick={handleCheckIn}
+              disabled={loading || checkInTime}
+              className='px-6 py-3 bg-green-600 text-white rounded-xl font-medium text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+            >
+              Check In
+            </button>
+            <button
+              onClick={handleCheckOut}
+              disabled={loading || !checkInTime}
+              className='px-6 py-3 bg-red-600 text-white rounded-xl font-medium text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+            >
+              Check Out
+            </button>
+          </div>
+
+          {checkInTime && (
+            <div className='mt-4 p-4 bg-blue-50 rounded-xl'>
+              <p className='text-sm text-gray-600'>Time elapsed</p>
+              <p className='text-2xl font-bold text-blue-700 font-mono'>{formatTime(elapsedMs)}</p>
+            </div>
+          )}
+
+          {error && <p className='text-red-600 text-sm mt-4'>{error}</p>}
         </div>
-        <table className='w-full table-auto text-sm'>
-          <thead>
-            <tr className='text-left border-b'>
-              <th className='px-4 py-3'>Date</th>
-              <th className='px-4 py-3'>Employee</th>
-              <th className='px-4 py-3'>Check In</th>
-              <th className='px-4 py-3'>Check Out</th>
-              <th className='px-4 py-3'>Check-in location</th>
-              <th className='px-4 py-3'>Duration</th>
-              <th className='px-4 py-3'>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAttendances.length === 0 ? (
-              <tr>
-                <td colSpan={7} className='px-4 py-12 text-center text-gray-500'>
-                  {attendances.length === 0
-                    ? `No attendance records for ${monthLabel}`
-                    : `No attendance records for selected employee in ${monthLabel}`}
-                </td>
-              </tr>
-            ) : (
-              filteredAttendances.map((a) => (
-                <tr key={a._id} className='border-b hover:bg-gray-50'>
-                  <td className='px-4 py-3'>{a.date ? new Date(a.date).toLocaleDateString() : '—'}</td>
-                  <td className='px-4 py-3 font-medium'>{a.employee?.name || '—'}</td>
-                  <td className='px-4 py-3'>{a.checkIn ? new Date(a.checkIn).toLocaleTimeString() : '—'}</td>
-                  <td className='px-4 py-3'>{a.checkOut ? new Date(a.checkOut).toLocaleTimeString() : '—'}</td>
-                  <td className='px-4 py-3 text-gray-600 max-w-[280px] align-top' title={a.checkInLatitude != null && a.checkInLongitude != null ? `${Number(a.checkInLatitude).toFixed(6)}, ${Number(a.checkInLongitude).toFixed(6)}` : null}>
-                    {a.checkInAddress || a.checkInLatitude != null && a.checkInLongitude != null ? (
-                      <span className='block'>
-                        {a.checkInAddress && <span className='block'>{a.checkInAddress}</span>}
-                        {(a.checkInLatitude != null && a.checkInLongitude != null) && (
-                          <span className='text-xs text-gray-500 mt-0.5 block font-mono'>
-                            {Number(a.checkInLatitude).toFixed(6)}, {Number(a.checkInLongitude).toFixed(6)}
-                          </span>
-                        )}
-                      </span>
+      )}
+
+      {(activeTab === 'employees' || !isHR) && (
+        <>
+          {isHR && (
+            <div className='bg-white rounded-lg shadow border border-gray-100 p-4 mb-4 overflow-x-auto'>
+              <div className='flex items-center justify-between gap-4 flex-wrap'>
+                <h2 className='text-lg font-bold text-gray-900'>Employee summary</h2>
+                <div className='flex items-center gap-2'>
+                  <label className='text-sm font-medium text-gray-700'>Month</label>
+                  <input
+                    type='month'
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  />
+                </div>
+              </div>
+              <div className='mt-3 overflow-x-auto'>
+                <table className='w-full table-auto text-sm'>
+                  <thead>
+                    <tr className='text-left border-b'>
+                      <th className='py-2 pr-4'>Employee</th>
+                      <th className='py-2 pr-4'>Full days</th>
+                      <th className='py-2 pr-4'>Half days</th>
+                      <th className='py-2 pr-4'>In progress</th>
+                      <th className='py-2 pr-4'>Total hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employeeMonthSummary.length === 0 ? (
+                      <tr><td colSpan={5} className='py-6 text-center text-gray-500'>No employees</td></tr>
                     ) : (
-                      <span className='text-gray-400 italic'>Location unavailable</span>
+                      employeeMonthSummary.map(({ emp, fullDays, halfDays, inProgress, totalHours }) => (
+                        <tr key={emp._id} className='border-b last:border-b-0'>
+                          <td className='py-2 pr-4 font-medium text-gray-900'>{emp.name}</td>
+                          <td className='py-2 pr-4'>{fullDays}</td>
+                          <td className='py-2 pr-4'>{halfDays}</td>
+                          <td className='py-2 pr-4'>{inProgress}</td>
+                          <td className='py-2 pr-4'>{totalHours.toFixed(2)}</td>
+                        </tr>
+                      ))
                     )}
-                  </td>
-                  <td className='px-4 py-3'>
-                    {a.durationHours != null
-                      ? `${a.durationHours.toFixed(2)} hrs`
-                      : a.checkIn
-                      ? 'In progress'
-                      : '—'}
-                  </td>
-                  <td className='px-4 py-3'>{getStatusBadge(a.status)}</td>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div className='bg-white rounded-lg shadow overflow-x-auto'>
+            <div className='px-4 py-3 border-b flex flex-wrap items-center justify-between gap-4'>
+              <h2 className='text-lg font-bold text-gray-900'>
+                {isHR ? "Employees Attendance" : "Your Attendance"}{' '}
+                <span className='text-sm font-medium text-gray-500'>
+                  {isHR && employeesViewMode === 'day' ? `(${dateLabel})` : `(${monthLabel})`}
+                </span>
+              </h2>
+              <div className='flex flex-wrap items-center gap-4'>
+                {isHR && (
+                  <div className='flex items-center gap-2'>
+                    <label className='text-sm font-medium text-gray-700'>View</label>
+                    <select
+                      value={employeesViewMode}
+                      onChange={(e) => setEmployeesViewMode(e.target.value)}
+                      className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                    >
+                      <option value='day'>Day</option>
+                      <option value='month'>Month</option>
+                    </select>
+                  </div>
+                )}
+                {isHR && employeesViewMode === 'day' && (
+                  <div className='flex items-center gap-2'>
+                    <label className='text-sm font-medium text-gray-700'>Date</label>
+                    <input
+                      type='date'
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                    />
+                  </div>
+                )}
+                {isHR && employeesViewMode === 'month' && (
+                  <div className='flex items-center gap-2'>
+                    <label className='text-sm font-medium text-gray-700'>Month</label>
+                    <input
+                      type='month'
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                    />
+                  </div>
+                )}
+                {isHR && (
+                  <div className='flex items-center gap-2'>
+                    <label className='text-sm font-medium text-gray-700'>Employee</label>
+                    <select
+                      value={filterEmployeeId}
+                      onChange={(e) => setFilterEmployeeId(e.target.value)}
+                      className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]'
+                    >
+                      <option value=''>All Employees</option>
+                      {employees.map((emp) => (
+                        <option key={emp._id} value={emp._id}>{emp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {!isHR && (
+                  <div className='flex items-center gap-2'>
+                    <label className='text-sm font-medium text-gray-700'>Month</label>
+                    <input
+                      type='month'
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+            <table className='w-full table-auto text-sm'>
+              <thead>
+                <tr className='text-left border-b'>
+                  <th className='px-4 py-3'>Date</th>
+                  <th className='px-4 py-3'>Employee</th>
+                  <th className='px-4 py-3'>Check In</th>
+                  <th className='px-4 py-3'>Check Out</th>
+                  <th className='px-4 py-3'>Check-in location</th>
+                  <th className='px-4 py-3'>Check-out location</th>
+                  <th className='px-4 py-3'>Duration</th>
+                  <th className='px-4 py-3'>Status</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {filteredAttendances.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className='px-4 py-12 text-center text-gray-500'>
+                      {attendances.length === 0
+                        ? `No attendance records for ${isHR && employeesViewMode === 'day' ? dateLabel : monthLabel}`
+                        : `No attendance records for selected employee in ${isHR && employeesViewMode === 'day' ? dateLabel : monthLabel}`}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAttendances.map((a) => (
+                    <tr key={a._id} className='border-b hover:bg-gray-50'>
+                      <td className='px-4 py-3'>{a.date ? new Date(a.date).toLocaleDateString() : '—'}</td>
+                      <td className='px-4 py-3 font-medium'>{a.employee?.name || '—'}</td>
+                      <td className='px-4 py-3'>{a.checkIn ? new Date(a.checkIn).toLocaleTimeString() : '—'}</td>
+                      <td className='px-4 py-3'>{a.checkOut ? new Date(a.checkOut).toLocaleTimeString() : '—'}</td>
+                      <td className='px-4 py-3 text-gray-600 max-w-[280px] align-top' title={a.checkInLatitude != null && a.checkInLongitude != null ? `${Number(a.checkInLatitude).toFixed(6)}, ${Number(a.checkInLongitude).toFixed(6)}` : null}>
+                        {a.checkInAddress || a.checkInLatitude != null && a.checkInLongitude != null ? (
+                          <span className='block'>
+                            {a.checkInAddress && <span className='block'>{a.checkInAddress}</span>}
+                            {(a.checkInLatitude != null && a.checkInLongitude != null) && (
+                              <span className='text-xs text-gray-500 mt-0.5 block font-mono'>
+                                {Number(a.checkInLatitude).toFixed(6)}, {Number(a.checkInLongitude).toFixed(6)}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className='text-gray-400 italic'>Location unavailable</span>
+                        )}
+                      </td>
+                      <td className='px-4 py-3 text-gray-600 max-w-[280px] align-top' title={a.checkOutLatitude != null && a.checkOutLongitude != null ? `${Number(a.checkOutLatitude).toFixed(6)}, ${Number(a.checkOutLongitude).toFixed(6)}` : null}>
+                        {a.checkOutAddress || a.checkOutLatitude != null && a.checkOutLongitude != null ? (
+                          <span className='block'>
+                            {a.checkOutAddress && <span className='block'>{a.checkOutAddress}</span>}
+                            {(a.checkOutLatitude != null && a.checkOutLongitude != null) && (
+                              <span className='text-xs text-gray-500 mt-0.5 block font-mono'>
+                                {Number(a.checkOutLatitude).toFixed(6)}, {Number(a.checkOutLongitude).toFixed(6)}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className='text-gray-400 italic'>—</span>
+                        )}
+                      </td>
+                      <td className='px-4 py-3'>
+                        {a.durationHours != null
+                          ? `${a.durationHours.toFixed(2)} hrs`
+                          : a.checkIn
+                          ? 'In progress'
+                          : '—'}
+                      </td>
+                      <td className='px-4 py-3'>{getStatusBadge(a.status)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   )
 }

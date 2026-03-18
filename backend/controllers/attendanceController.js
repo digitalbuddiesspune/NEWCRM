@@ -60,7 +60,9 @@ export const checkIn = async (req, res) => {
 
 export const checkOut = async (req, res) => {
   try {
-    const { employee } = req.body;
+    const { employee, latitude, longitude, address } = req.body;
+    const lat = latitude == null ? null : (typeof latitude === 'number' ? latitude : Number(latitude));
+    const lon = longitude == null ? null : (typeof longitude === 'number' ? longitude : Number(longitude));
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -87,6 +89,14 @@ export const checkOut = async (req, res) => {
       }
     } else {
       attendance.checkOut = new Date();
+      // Only capture location for a real (today) checkout initiated by user
+      if (!Number.isNaN(lat) && !Number.isNaN(lon) && lat != null && lon != null) {
+        attendance.checkOutLatitude = lat;
+        attendance.checkOutLongitude = lon;
+        if (typeof address === 'string' && address.trim()) {
+          attendance.checkOutAddress = address.trim();
+        }
+      }
     }
 
     if (!attendance || !attendance.checkIn) {

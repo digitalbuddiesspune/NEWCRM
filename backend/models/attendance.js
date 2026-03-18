@@ -19,6 +19,9 @@ const attendanceSchema = new mongoose.Schema({
   checkOut: {
     type: Date,
   },
+  checkOutLatitude: { type: Number },
+  checkOutLongitude: { type: Number },
+  checkOutAddress: { type: String },
   durationHours: {
     type: Number,
   },
