@@ -18,7 +18,7 @@ import leaveRouter from './routes/leaveRoute.js';
 import billingRouter from './routes/billingRoute.js';
 import companyRouter from './routes/companyRoute.js';
 import expenseRouter from './routes/expenseRoute.js';
-import { autoCheckoutPreviousDays } from './utils/attendanceAutoCheckout.js';
+import { autoCheckoutForDay, autoCheckoutPreviousDays } from './utils/attendanceAutoCheckout.js';
 
 dotenv.config();
 
@@ -38,7 +38,27 @@ const runAttendanceSweeper = async () => {
   }
 };
 runAttendanceSweeper();
-setInterval(runAttendanceSweeper, 5 * 60 * 1000);
+
+// Daily 11:59 PM auto checkout for users who forgot to check out
+const scheduleDailyAttendanceAutoCheckout = () => {
+  const now = new Date();
+  const runAt = new Date(now);
+  runAt.setHours(23, 59, 0, 0);
+  if (runAt <= now) runAt.setDate(runAt.getDate() + 1);
+
+  const delay = runAt.getTime() - now.getTime();
+  setTimeout(async () => {
+    try {
+      const { updated } = await autoCheckoutForDay(new Date());
+      if (updated) console.log(`11:59 PM auto checked-out ${updated} attendance record(s)`);
+    } catch (e) {
+      console.error('11:59 PM attendance auto-checkout failed:', e?.message || e);
+    } finally {
+      scheduleDailyAttendanceAutoCheckout();
+    }
+  }, delay);
+};
+scheduleDailyAttendanceAutoCheckout();
 
 
 app.use(

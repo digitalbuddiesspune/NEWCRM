@@ -23,7 +23,6 @@ const AttendanceView = () => {
   const [attendances, setAttendances] = useState([]) // table data (day or month depending on view)
   const [monthAttendances, setMonthAttendances] = useState([]) // always month data for employee summary
   const [selectedEmployee, setSelectedEmployee] = useState('')
-  const [employeeSearch, setEmployeeSearch] = useState('')
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -34,7 +33,6 @@ const AttendanceView = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const timerRef = useRef(null)
-  const employeeRef = useRef(null)
 
   const fetchEmployees = async () => {
     try {
@@ -108,11 +106,10 @@ const AttendanceView = () => {
   }, [isHR, activeTab, selectedMonth])
 
   useEffect(() => {
-    if (!isHR && user?._id) {
+    if (user?._id) {
       setSelectedEmployee(user._id)
-      setEmployeeSearch(user.name || '')
     }
-  }, [isHR, user?._id, user?.name])
+  }, [user?._id, user?.name])
 
   useEffect(() => {
     const stored = localStorage.getItem('attendance_session')
@@ -120,14 +117,13 @@ const AttendanceView = () => {
       try {
         const { employeeId, checkIn } = JSON.parse(stored)
         const checkInDate = new Date(checkIn)
-        if (!isHR && employeeId !== user?._id) {
+        if (employeeId !== user?._id) {
           localStorage.removeItem('attendance_session')
           return
         }
-        const emp = isHR ? employees.find((e) => e._id === employeeId) : { _id: user?._id, name: user?.name }
-        if (emp && (emp._id === employeeId)) {
+        const emp = { _id: user?._id, name: user?.name }
+        if (emp._id === employeeId) {
           setSelectedEmployee(employeeId)
-          setEmployeeSearch(emp.name || '')
           setCheckInTime(checkInDate)
           setElapsedMs(Date.now() - checkInDate.getTime())
         }
@@ -135,7 +131,7 @@ const AttendanceView = () => {
         localStorage.removeItem('attendance_session')
       }
     }
-  }, [employees, isHR, user?._id, user?.name])
+  }, [user?._id, user?.name])
 
   useEffect(() => {
     if (checkInTime) {
@@ -172,19 +168,6 @@ const AttendanceView = () => {
     checkDayEnd()
     return () => clearInterval(dayEndInterval)
   }, [checkInTime, selectedEmployee])
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (employeeRef.current && !employeeRef.current.contains(e.target)) setEmployeeOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const [employeeOpen, setEmployeeOpen] = useState(false)
-  const filteredEmployees = employees.filter((e) =>
-    (e.name || '').toLowerCase().includes(employeeSearch.toLowerCase())
-  )
 
   const getLocation = () => {
     return new Promise((resolve) => {
@@ -336,12 +319,6 @@ const AttendanceView = () => {
     }
   }
 
-  const handleEmployeeSelect = (emp) => {
-    setSelectedEmployee(emp._id)
-    setEmployeeSearch(emp.name || '')
-    setEmployeeOpen(false)
-  }
-
   const monthLabel = selectedMonth
     ? new Date(selectedMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
     : ''
@@ -407,41 +384,11 @@ const AttendanceView = () => {
 
       {(activeTab === 'my' || !isHR) && (
         <div className='bg-white rounded-xl shadow-lg border border-gray-100 p-6 max-w-2xl mb-8'>
-          <div className='mb-4 relative' ref={employeeRef}>
+          <div className='mb-4'>
             <label className='block text-sm font-medium text-gray-700 mb-2'>Employee</label>
-            {isHR ? (
-              <>
-                <input
-                  type='text'
-                  value={employeeSearch}
-                  onChange={(e) => {
-                    setEmployeeSearch(e.target.value)
-                    setEmployeeOpen(true)
-                    if (!e.target.value) setSelectedEmployee('')
-                  }}
-                  onFocus={() => setEmployeeOpen(true)}
-                  placeholder='Search employee...'
-                  className='w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-                />
-                {employeeOpen && (
-                  <ul className='absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-xl shadow-lg py-1 max-h-48 overflow-auto'>
-                    {filteredEmployees.map((emp) => (
-                      <li
-                        key={emp._id}
-                        onClick={() => handleEmployeeSelect(emp)}
-                        className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 ${selectedEmployee === emp._id ? 'bg-blue-100' : ''}`}
-                      >
-                        {emp.name}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            ) : (
-              <div className='w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-gray-50 text-gray-700'>
-                {user?.name || '—'}
-              </div>
-            )}
+            <div className='w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-gray-50 text-gray-700'>
+              {user?.name || '—'}
+            </div>
           </div>
 
           <p className='text-xs text-gray-500 mb-2'>
