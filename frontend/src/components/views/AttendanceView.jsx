@@ -83,6 +83,25 @@ const AttendanceView = () => {
     }
   }
 
+  const syncActiveSessionFromServer = async () => {
+    if (!user?._id) return
+    try {
+      const res = await api.get('/attendance/today', { params: { employeeId: user._id } })
+      const rows = Array.isArray(res.data) ? res.data : []
+      const active = rows.find((r) => r.checkIn && !r.checkOut)
+      if (active?.checkIn) {
+        const ci = new Date(active.checkIn)
+        setCheckInTime(ci)
+        setElapsedMs(Math.max(0, Date.now() - ci.getTime()))
+      } else {
+        setCheckInTime(null)
+        setElapsedMs(0)
+      }
+    } catch {
+      // ignore, UI keeps current state
+    }
+  }
+
   useEffect(() => {
     if (isHR) fetchEmployees()
   }, [isHR])
@@ -112,26 +131,8 @@ const AttendanceView = () => {
   }, [user?._id, user?.name])
 
   useEffect(() => {
-    const stored = localStorage.getItem('attendance_session')
-    if (stored) {
-      try {
-        const { employeeId, checkIn } = JSON.parse(stored)
-        const checkInDate = new Date(checkIn)
-        if (employeeId !== user?._id) {
-          localStorage.removeItem('attendance_session')
-          return
-        }
-        const emp = { _id: user?._id, name: user?.name }
-        if (emp._id === employeeId) {
-          setSelectedEmployee(employeeId)
-          setCheckInTime(checkInDate)
-          setElapsedMs(Date.now() - checkInDate.getTime())
-        }
-      } catch {
-        localStorage.removeItem('attendance_session')
-      }
-    }
-  }, [user?._id, user?.name])
+    syncActiveSessionFromServer()
+  }, [user?._id])
 
   useEffect(() => {
     if (checkInTime) {
@@ -157,7 +158,6 @@ const AttendanceView = () => {
           .then(() => {
             setCheckInTime(null)
             setElapsedMs(0)
-            localStorage.removeItem('attendance_session')
             if (timerRef.current) clearInterval(timerRef.current)
             fetchAttendanceByMonth()
           })
@@ -227,11 +227,7 @@ const AttendanceView = () => {
 
   const handleCheckIn = async () => {
     if (!selectedEmployee) {
-      setError('Please select an employee')
-      return
-    }
-    if (!isHR && selectedEmployee !== user?._id) {
-      setError('You can only check in for yourself')
+      setError('User is not ready yet. Please try again.')
       return
     }
     setLoading(true)
@@ -262,10 +258,7 @@ const AttendanceView = () => {
       const checkIn = new Date(res.data.attendance?.checkIn || Date.now())
       setCheckInTime(checkIn)
       setElapsedMs(0)
-      localStorage.setItem(
-        'attendance_session',
-        JSON.stringify({ employeeId: selectedEmployee, checkIn: checkIn.toISOString() })
-      )
+      await syncActiveSessionFromServer()
       fetchAttendanceByMonth()
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error checking in')
@@ -276,11 +269,7 @@ const AttendanceView = () => {
 
   const handleCheckOut = async () => {
     if (!selectedEmployee) {
-      setError('Please select an employee')
-      return
-    }
-    if (!isHR && selectedEmployee !== user?._id) {
-      setError('You can only check out for yourself')
+      setError('User is not ready yet. Please try again.')
       return
     }
     setLoading(true)
@@ -289,28 +278,21 @@ const AttendanceView = () => {
       const location = await getLocation()
       const hasValidLocation = !location.failed && location.latitude != null && location.longitude != null &&
         !Number.isNaN(Number(location.latitude)) && !Number.isNaN(Number(location.longitude))
-      if (!hasValidLocation) {
-        const msg = location.reason === 'permission_denied'
-          ? 'Location is required to check out. Allow location for this site (click the lock icon in the address bar → Site settings → Location → Allow), then try again.'
-          : location.reason === 'timeout'
-          ? 'Location is required to check out. Request timed out—ensure device location is on and try again.'
-          : location.reason === 'unsupported'
-          ? 'Location is required to check out. Your browser does not support geolocation.'
-          : 'Location is required to check out. Enable device location and allow this site to use it, then try again.'
-        setError(msg)
-        setLoading(false)
-        return
-      }
-      await api.post('/attendance/check-out', {
+      const checkoutPayload = {
         employee: selectedEmployee,
-        latitude: Number(location.latitude),
-        longitude: Number(location.longitude),
-        ...(location.address && location.address.trim() && { address: String(location.address).trim() }),
-      })
+      }
+      if (hasValidLocation) {
+        checkoutPayload.latitude = Number(location.latitude)
+        checkoutPayload.longitude = Number(location.longitude)
+        if (location.address && location.address.trim()) {
+          checkoutPayload.address = String(location.address).trim()
+        }
+      }
+      await api.post('/attendance/check-out', checkoutPayload)
       setCheckInTime(null)
       setElapsedMs(0)
-      localStorage.removeItem('attendance_session')
       if (timerRef.current) clearInterval(timerRef.current)
+      await syncActiveSessionFromServer()
       fetchAttendanceByMonth()
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error checking out')
