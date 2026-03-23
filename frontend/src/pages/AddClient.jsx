@@ -17,6 +17,9 @@ const AddClient = () => {
     clientType: 'Recurring',
     projectEndDate: '',
     address: '',
+    city: '',
+    state: '',
+    pincode: '',
     onboardBy: '',
     status: 'Active',
     mouLink: '',
@@ -31,11 +34,27 @@ const AddClient = () => {
   const [customServices, setCustomServices] = useState([])
   const [newServiceInput, setNewServiceInput] = useState('')
   const [employeesLoading, setEmployeesLoading] = useState(true)
+  const [states, setStates] = useState([])
+  const [cities, setCities] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const onboardRef = useRef(null)
 
   const navigate = useNavigate()
+  const PINCODE_REGEX = /^[1-9][0-9]{5}$/
+
+  const fetchCities = async (stateCode) => {
+    if (!stateCode) {
+      setCities([])
+      return
+    }
+    try {
+      const res = await api.get('/locations/cities', { params: { stateCode } })
+      setCities(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      setCities([])
+    }
+  }
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -51,6 +70,18 @@ const AddClient = () => {
       }
     }
     fetchEmployees()
+  }, [])
+
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const res = await api.get('/locations/states')
+        setStates(Array.isArray(res.data) ? res.data : [])
+      } catch {
+        setStates([])
+      }
+    }
+    fetchStates()
   }, [])
 
   useEffect(() => {
@@ -73,6 +104,9 @@ const AddClient = () => {
           clientType: c.clientType ?? 'Recurring',
           projectEndDate: c.projectEndDate ? c.projectEndDate.split('T')[0] : '',
           address: c.address ?? '',
+          city: c.city ?? '',
+          state: c.state ?? '',
+          pincode: c.pincode ?? '',
           onboardBy: onboardId ?? '',
           status: c.status ?? 'Active',
           mouLink: c.mouLink ?? '',
@@ -90,6 +124,12 @@ const AddClient = () => {
     }
     fetchClient()
   }, [id])
+
+  useEffect(() => {
+    if (!form.state || states.length === 0) return
+    const matched = states.find((s) => s.name === form.state)
+    if (matched?.iso2) fetchCities(matched.iso2)
+  }, [form.state, states])
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -153,6 +193,10 @@ const AddClient = () => {
     }
     if (form.clientType === 'Non Recurring' && !form.projectEndDate) {
       setError('Please enter project end date for non-recurring clients')
+      return
+    }
+    if (form.pincode && !PINCODE_REGEX.test(form.pincode)) {
+      setError('Please enter a valid 6-digit pincode')
       return
     }
     setLoading(true)
@@ -316,9 +360,49 @@ const AddClient = () => {
             </div>
 
             {/* Row 5: Address (col-span-4) */}
-            <div className='col-span-full'>
-              <label className='block text-sm font-medium text-gray-700 mb-1'>Address</label>
-              <input name='address' value={form.address} onChange={handleChange} className={inputClass} />
+            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4'>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>State</label>
+                <select
+                  name='state'
+                  value={form.state}
+                  onChange={(e) => {
+                    const selectedName = e.target.value
+                    const selected = states.find((s) => s.name === selectedName)
+                    setForm((f) => ({ ...f, state: selectedName, city: '' }))
+                    fetchCities(selected?.iso2 || '')
+                  }}
+                  className={inputClass}
+                >
+                  <option value=''>Select state</option>
+                  {states.map((s) => (
+                    <option key={s.iso2 || s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>City</label>
+                <select
+                  name='city'
+                  value={form.city}
+                  onChange={handleChange}
+                  className={inputClass}
+                  disabled={!form.state}
+                >
+                  <option value=''>{form.state ? 'Select city' : 'Select state first'}</option>
+                  {cities.map((c) => (
+                    <option key={c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className='lg:col-span-2'>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Street Address</label>
+                <input name='address' value={form.address} onChange={handleChange} className={inputClass} />
+              </div>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Pincode</label>
+                <input name='pincode' value={form.pincode} onChange={handleChange} className={inputClass} placeholder='6-digit pincode' maxLength={6} />
+              </div>
             </div>
 
             {/* Row 6: MOU fields - 2 + 2 + 4 or 2 cols each */}

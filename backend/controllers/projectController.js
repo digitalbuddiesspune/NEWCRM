@@ -1,4 +1,5 @@
 import Project from '../models/project.js';
+import { syncClientProfile } from '../utils/clientProfileSync.js';
 
 // Create a new project
 export const createProject = async (req, res) => {
@@ -40,6 +41,7 @@ export const createProject = async (req, res) => {
     });
 
     await newProject.save();
+    await syncClientProfile({ clientId: client, preferredProjectId: newProject._id });
     const populated = await Project.findById(newProject._id)
       .populate('client')
       .populate('projectManager')
@@ -138,6 +140,7 @@ export const getProjectById = async (req, res) => {
 // Update a project by ID
 export const updateProject = async (req, res) => {
   try {
+    const previous = await Project.findById(req.params.id).select('client');
     const updated = await Project.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
     })
@@ -145,6 +148,8 @@ export const updateProject = async (req, res) => {
       .populate('projectManager')
       .populate('teamMembers');
     if (!updated) return res.status(404).json({ message: 'Project not found' });
+    if (previous?.client) await syncClientProfile({ clientId: previous.client, preferredProjectId: updated._id });
+    if (updated?.client) await syncClientProfile({ clientId: updated.client, preferredProjectId: updated._id });
     res.status(200).json({ message: 'Project updated', project: updated });
   } catch (error) {
     res.status(500).json({ message: 'Error updating project', error });
@@ -156,6 +161,7 @@ export const deleteProject = async (req, res) => {
   try {
     const deleted = await Project.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: 'Project not found' });
+    if (deleted?.client) await syncClientProfile({ clientId: deleted.client });
     res.status(200).json({ message: 'Project deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting project', error });

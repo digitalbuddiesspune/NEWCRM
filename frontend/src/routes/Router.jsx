@@ -34,6 +34,9 @@ import AddBilling from '../pages/AddBilling'
 import InvoicePage from '../pages/InvoicePage'
 import CompaniesView from '../components/views/CompaniesView'
 import AddCompany from '../pages/AddCompany'
+import ClientProfilesView from '../components/views/ClientProfilesView'
+import AddClientProfile from '../pages/AddClientProfile'
+import SocialCalendarClientView from '../pages/SocialCalendarClientView'
 
 const router = createBrowserRouter([
     {
@@ -48,6 +51,9 @@ const router = createBrowserRouter([
             { path: 'dashboard', element: <DashboardView /> },
             { path: 'admin-dashboard', element: <DashboardView /> },
             { path: 'clients', element: <ClientsView /> },
+            { path: 'client-profiles', element: <ClientProfilesView /> },
+            { path: 'client-profiles/new', element: <AddClientProfile /> },
+            { path: 'client-profiles/edit/:id', element: <AddClientProfile /> },
             { path: 'add-client', element: <AddClient /> },
             { path: 'clients/edit/:id', element: <AddClient /> },
             { path: 'companies', element: <CompaniesView /> },
@@ -59,6 +65,7 @@ const router = createBrowserRouter([
             { path: 'campaigns', element: <CampaignsView /> },
             { path: 'leads', element: <LeadsView /> },
             { path: 'add-lead', element: <AddLead /> },
+            { path: 'leads/view/:id', element: <AddLead readOnly /> },
             { path: 'leads/edit/:id', element: <AddLead /> },
             { path: 'projects', element: <ProjectsView /> },
             { path: 'my-projects', element: <MyProjectsView /> },
@@ -93,6 +100,10 @@ const router = createBrowserRouter([
     {
         path: '/login',
         element: <Login />,
+    },
+    {
+        path: '/social-calendar/client/:token',
+        element: <SocialCalendarClientView />,
     },
 ])
 

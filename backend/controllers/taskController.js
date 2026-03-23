@@ -1,13 +1,103 @@
 import mongoose from 'mongoose';
 import Task from '../models/task.js';
 import SocialMediaCalendar from '../models/socialMediaCalendar.js';
+import { syncClientProfileByProjectId } from '../utils/clientProfileSync.js';
+import { getNextRecurringDate } from '../utils/recurringTaskScheduler.js';
+
+const normalizeDateStart = (value) => {
+  const d = new Date(value);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const shouldCreateRecurringTemplate = (payload) =>
+  payload?.recurrenceEnabled === true || payload?.isRecurring === true;
 
 export const createTask = async (req, res) => {
   try {
-    const { project, title, description, assignedTo, assignedBy, status, priority, dueDate } = req.body;
+    const {
+      project,
+      title,
+      description,
+      assignedTo,
+      assignedBy,
+      status,
+      priority,
+      dueDate,
+      recurrenceEnabled,
+      recurrenceType,
+      recurrenceInterval,
+      recurrenceStartDate,
+      recurrenceEndDate,
+      isRecurring,
+    } = req.body;
+
     if (!project || !title || !assignedTo || !assignedBy) {
       return res.status(400).json({ message: 'Project, title, assignedTo, and assignedBy are required' });
     }
+
+    if (shouldCreateRecurringTemplate({ recurrenceEnabled, isRecurring })) {
+      if (!recurrenceType || !['daily', 'weekly', 'monthly'].includes(recurrenceType)) {
+        return res.status(400).json({ message: 'Valid recurrenceType is required for auto task' });
+      }
+
+      const interval = Math.max(1, Number(recurrenceInterval) || 1);
+      const firstRunDate = normalizeDateStart(recurrenceStartDate || dueDate || new Date());
+      const endDate = recurrenceEndDate ? normalizeDateStart(recurrenceEndDate) : null;
+
+      if (endDate && endDate < firstRunDate) {
+        return res.status(400).json({ message: 'recurrenceEndDate must be on or after recurrenceStartDate' });
+      }
+
+      const firstTask = new Task({
+        project,
+        title,
+        description,
+        assignedTo,
+        assignedBy,
+        status: 'Pending',
+        priority: priority || 'Medium',
+        dueDate: firstRunDate,
+        isRecurringTemplate: false,
+        recurrenceEnabled: false,
+        recurringScheduledFor: firstRunDate,
+      });
+      await firstTask.save();
+
+      const templateTask = new Task({
+        project,
+        title,
+        description,
+        assignedTo,
+        assignedBy,
+        status: status || 'Pending',
+        priority: priority || 'Medium',
+        dueDate: firstRunDate,
+        isRecurringTemplate: true,
+        recurrenceEnabled: true,
+        recurrenceType,
+        recurrenceInterval: interval,
+        recurrenceStartDate: firstRunDate,
+        recurrenceEndDate: endDate || undefined,
+        nextRunAt: getNextRecurringDate(firstRunDate, recurrenceType, interval),
+        lastGeneratedAt: new Date(),
+      });
+      await templateTask.save();
+
+      await syncClientProfileByProjectId(project);
+
+      const populated = await Task.findById(firstTask._id)
+        .populate('project')
+        .populate('assignedTo')
+        .populate('assignedBy');
+
+      return res.status(201).json({
+        message: 'Auto task created successfully',
+        task: populated,
+        recurringTemplateId: templateTask._id,
+      });
+    }
+
     const task = new Task({
       project,
       title,
@@ -17,13 +107,16 @@ export const createTask = async (req, res) => {
       status: status || 'Pending',
       priority: priority || 'Medium',
       dueDate: dueDate ? new Date(dueDate) : undefined,
+      isRecurringTemplate: false,
+      recurrenceEnabled: false,
     });
     await task.save();
+    await syncClientProfileByProjectId(project);
     const populated = await Task.findById(task._id)
       .populate('project')
       .populate('assignedTo')
       .populate('assignedBy');
-    res.status(201).json({ message: 'Task assigned successfully', task: populated });
+    return res.status(201).json({ message: 'Task assigned successfully', task: populated });
   } catch (error) {
     res.status(500).json({ message: 'Error creating task', error });
   }
@@ -38,7 +131,7 @@ const socialStatusToTaskStatus = (status) => {
 export const getTasks = async (req, res) => {
   try {
     const { projectId, employeeId } = req.query;
-    const filter = {};
+    const filter = { isRecurringTemplate: { $ne: true } };
     if (projectId) filter.project = projectId;
     if (employeeId) filter.assignedTo = employeeId;
 
@@ -60,6 +153,7 @@ export const getTasks = async (req, res) => {
       const socialTasks = [];
       for (const cal of calendars) {
         for (const post of cal.posts) {
+          if ((post.clientReviewStatus || 'Pending') !== 'Accepted') continue;
           const assignees = post.assignedTo || [];
           if (!assignees.length) continue;
           for (const emp of assignees) {
@@ -82,6 +176,15 @@ export const getTasks = async (req, res) => {
               priority: 'Medium',
               dueDate: post.scheduledTime,
               platform: post.platform,
+              contentType: post.contentType,
+              subject: post.subject || '',
+              description: post.description || '',
+              carouselItems: Array.isArray(post.carouselItems) ? post.carouselItems : [],
+              referenceLink: post.referenceLink || '',
+              referenceUpload: post.referenceUpload || { fileName: '', mimeType: '', dataUrl: '' },
+              clientReviewStatus: post.clientReviewStatus || 'Pending',
+              clientNote: post.clientNote || '',
+              uploadedLinks: Array.isArray(post.uploadedLinks) ? post.uploadedLinks : [],
             });
           }
         }
@@ -114,11 +217,15 @@ export const getTaskById = async (req, res) => {
 
 export const updateTask = async (req, res) => {
   try {
+    const existing = await Task.findById(req.params.id).select('project');
+    if (!existing) return res.status(404).json({ message: 'Task not found' });
+
     const updated = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true })
       .populate('project')
       .populate('assignedTo')
       .populate('assignedBy');
-    if (!updated) return res.status(404).json({ message: 'Task not found' });
+    await syncClientProfileByProjectId(existing.project);
+    await syncClientProfileByProjectId(updated?.project?._id || updated?.project || req.body?.project);
     res.status(200).json({ message: 'Task updated', task: updated });
   } catch (error) {
     res.status(500).json({ message: 'Error updating task', error });
@@ -129,6 +236,7 @@ export const deleteTask = async (req, res) => {
   try {
     const deleted = await Task.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: 'Task not found' });
+    await syncClientProfileByProjectId(deleted.project);
     res.status(200).json({ message: 'Task deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting task', error });

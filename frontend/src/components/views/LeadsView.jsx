@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
 import { useNavigate } from 'react-router-dom'
-import { EditIcon } from '../Icons'
+import { EditIcon, ViewIcon } from '../Icons'
 
 const STATUS_OPTIONS = [
   'Call not Received',
@@ -265,13 +265,22 @@ const LeadsView = () => {
                     </td>
                     <td className='px-4 py-3'>{l.generatedBy?.name || '—'}</td>
                     <td className='px-4 py-3'>
-                      <button
-                        onClick={() => navigate(`/leads/edit/${l._id}`)}
-                        className='p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors'
-                        title='Edit'
-                      >
-                        <EditIcon />
-                      </button>
+                      <div className='flex items-center gap-2'>
+                        <button
+                          onClick={() => navigate(`/leads/view/${l._id}`)}
+                          className='p-1.5 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors'
+                          title='View'
+                        >
+                          <ViewIcon />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/leads/edit/${l._id}`)}
+                          className='p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors'
+                          title='Edit'
+                        >
+                          <EditIcon />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

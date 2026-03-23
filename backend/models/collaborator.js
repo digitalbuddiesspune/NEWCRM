@@ -21,6 +21,10 @@ const collaboratorSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  pincode: {
+    type: String,
+    default: '',
+  },
   rate: {
     type: Number,
     default: null,

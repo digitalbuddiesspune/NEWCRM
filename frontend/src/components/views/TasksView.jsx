@@ -121,6 +121,8 @@ const TasksView = ({ isMyTasks = false }) => {
 
   const [viewTask, setViewTask] = useState(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [uploadingPostLink, setUploadingPostLink] = useState(false)
+  const [socialUpload, setSocialUpload] = useState({ platform: '', url: '' })
 
   const taskStatusToSocialStatus = (status) => {
     if (status === 'Completed') return 'Published'
@@ -168,6 +170,42 @@ const TasksView = ({ isMyTasks = false }) => {
   }
 
   const STATUS_OPTIONS = ['Pending', 'In Progress', 'Completed', 'Cancelled']
+  const SOCIAL_PLATFORMS = ['Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
+
+  const handleAddUploadedLink = async () => {
+    if (!viewTask?.source || viewTask.source !== 'social_media') return
+    if (!viewTask.clientId || !viewTask.postId) return
+    if (!socialUpload.url.trim()) return
+
+    setUploadingPostLink(true)
+    try {
+      const res = await api.post(
+        `/social-calendars/client/${viewTask.clientId}/posts/${viewTask.postId}/upload-links`,
+        {
+          platform: socialUpload.platform || '',
+          url: socialUpload.url.trim(),
+          addedBy: user?._id || undefined,
+        }
+      )
+      const updatedCalendar = res.data?.calendar
+      const updatedPost = updatedCalendar?.posts?.find((p) => p._id === viewTask.postId)
+      if (updatedPost) {
+        setViewTask((prev) => (prev ? { ...prev, uploadedLinks: updatedPost.uploadedLinks || [] } : prev))
+      } else {
+        setViewTask((prev) => (prev
+          ? {
+              ...prev,
+              uploadedLinks: [...(prev.uploadedLinks || []), { platform: socialUpload.platform || '', url: socialUpload.url.trim() }],
+            }
+          : prev))
+      }
+      setSocialUpload({ platform: '', url: '' })
+    } catch (err) {
+      console.error('Failed to add uploaded post link:', err)
+    } finally {
+      setUploadingPostLink(false)
+    }
+  }
 
   return (
     <div className='p-8'>
@@ -307,10 +345,14 @@ const TasksView = ({ isMyTasks = false }) => {
                   onClick={() => setViewTask(task)}
                   className='border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer'
                 >
-                  <td className='py-4 px-6'>
-                    <p className='text-sm font-medium text-gray-900'>{task.title}</p>
+                  <td className={`py-4 px-6 ${isMyTasks ? 'w-[300px] max-w-[300px]' : ''}`}>
+                    <p className={`text-sm font-medium text-gray-900 ${isMyTasks ? 'line-clamp-2' : ''}`}>
+                      {task.title}
+                    </p>
                     {task.description && (
-                      <p className='text-sm text-gray-500 mt-0.5 line-clamp-1'>{task.description}</p>
+                      <p className={`text-sm text-gray-500 mt-0.5 ${isMyTasks ? 'line-clamp-2' : 'line-clamp-1'}`}>
+                        {task.description}
+                      </p>
                     )}
                   </td>
                   <td className='py-4 px-6 text-gray-700 text-sm'>
@@ -348,7 +390,10 @@ const TasksView = ({ isMyTasks = false }) => {
       {viewTask && (
         <div
           className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'
-          onClick={() => setViewTask(null)}
+          onClick={() => {
+            setViewTask(null)
+            setSocialUpload({ platform: '', url: '' })
+          }}
         >
           <div
             className='bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto'
@@ -357,7 +402,10 @@ const TasksView = ({ isMyTasks = false }) => {
             <div className='flex justify-between items-start mb-4'>
               <h3 className='text-sm font-bold text-gray-900'>{viewTask.title}</h3>
               <button
-                onClick={() => setViewTask(null)}
+                onClick={() => {
+                  setViewTask(null)
+                  setSocialUpload({ platform: '', url: '' })
+                }}
                 className='p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600'
               >
                 <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
@@ -374,6 +422,76 @@ const TasksView = ({ isMyTasks = false }) => {
             )}
 
             <div className='space-y-3'>
+              {viewTask.source === 'social_media' && (
+                <>
+                  <div className='py-2 border-b border-gray-100'>
+                    <span className='text-sm text-gray-500'>Reference</span>
+                    <div className='mt-1'>
+                      {viewTask.referenceLink ? (
+                        <a href={viewTask.referenceLink} target='_blank' rel='noopener noreferrer' className='text-sm text-indigo-600 hover:underline break-all'>
+                          {viewTask.referenceLink}
+                        </a>
+                      ) : viewTask.referenceUpload?.dataUrl ? (
+                        <a href={viewTask.referenceUpload.dataUrl} target='_blank' rel='noopener noreferrer' className='text-sm text-indigo-600 hover:underline break-all'>
+                          {viewTask.referenceUpload.fileName || 'Open uploaded reference'}
+                        </a>
+                      ) : (
+                        <p className='text-sm text-gray-500'>No reference shared</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className='py-2 border-b border-gray-100'>
+                    <span className='text-sm text-gray-500'>Client Note</span>
+                    <p className='text-sm font-medium text-gray-900 mt-1 whitespace-pre-wrap'>
+                      {viewTask.clientNote || 'No client note'}
+                    </p>
+                  </div>
+                  <div className='py-2 border-b border-gray-100'>
+                    <span className='text-sm text-gray-500'>Uploaded Post Links</span>
+                    {Array.isArray(viewTask.uploadedLinks) && viewTask.uploadedLinks.length > 0 ? (
+                      <div className='mt-2 space-y-1.5'>
+                        {viewTask.uploadedLinks.map((link, idx) => (
+                          <div key={`${link.url}-${idx}`} className='text-sm'>
+                            <span className='text-gray-500'>{link.platform || 'Platform'}: </span>
+                            <a href={link.url} target='_blank' rel='noopener noreferrer' className='text-indigo-600 hover:underline break-all'>
+                              {link.url}
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className='text-sm text-gray-500 mt-1'>No uploaded links yet.</p>
+                    )}
+                    <div className='grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3'>
+                      <select
+                        value={socialUpload.platform}
+                        onChange={(e) => setSocialUpload((p) => ({ ...p, platform: e.target.value }))}
+                        className='border border-gray-300 rounded-lg px-2 py-1.5 text-sm'
+                      >
+                        <option value=''>Select platform</option>
+                        {SOCIAL_PLATFORMS.map((platform) => (
+                          <option key={platform} value={platform}>{platform}</option>
+                        ))}
+                      </select>
+                      <input
+                        type='url'
+                        placeholder='https://uploaded-post-link'
+                        value={socialUpload.url}
+                        onChange={(e) => setSocialUpload((p) => ({ ...p, url: e.target.value }))}
+                        className='sm:col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm'
+                      />
+                    </div>
+                    <button
+                      type='button'
+                      onClick={handleAddUploadedLink}
+                      disabled={uploadingPostLink || !socialUpload.url.trim()}
+                      className='mt-2 px-3 py-1.5 rounded-lg text-sm font-medium border border-indigo-600 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50'
+                    >
+                      {uploadingPostLink ? 'Adding...' : 'Add Uploaded Link'}
+                    </button>
+                  </div>
+                </>
+              )}
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
                 <span className='text-sm text-gray-500'>Project</span>
                 <span className='text-sm font-medium text-gray-900'>
@@ -430,7 +548,10 @@ const TasksView = ({ isMyTasks = false }) => {
 
             <div className='mt-6 pt-4 border-t border-gray-200'>
               <button
-                onClick={() => setViewTask(null)}
+                onClick={() => {
+                  setViewTask(null)
+                  setSocialUpload({ platform: '', url: '' })
+                }}
                 className='w-full py-2 px-4 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50'
               >
                 Close

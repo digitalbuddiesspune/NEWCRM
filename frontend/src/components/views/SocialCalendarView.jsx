@@ -4,6 +4,13 @@ import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 
 const PLATFORMS = ['All', 'Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
+const CONTENT_TYPES = ['Reel', 'Feed Post', 'Carousel', 'Story']
+const CLIENT_REVIEW_BADGE = {
+  Pending: 'bg-amber-100 text-amber-800',
+  Accepted: 'bg-green-100 text-green-800',
+  Rejected: 'bg-red-100 text-red-800',
+  'Need Changes': 'bg-purple-100 text-purple-800',
+}
 
 const SocialCalendarView = () => {
   const { canManageSocialCalendar } = useAuth()
@@ -18,11 +25,15 @@ const SocialCalendarView = () => {
   const [editingPost, setEditingPost] = useState(null)
   const [postForm, setPostForm] = useState({
     title: '',
+    contentType: 'Feed Post',
+    subject: '',
     description: '',
+    carouselItems: [{ subject: '', description: '' }],
     platform: 'Instagram',
     scheduledTime: '',
     status: 'Scheduled',
     referenceLink: '',
+    referenceUpload: { fileName: '', mimeType: '', dataUrl: '' },
     assignedTo: [],
   })
   const [employees, setEmployees] = useState([])
@@ -121,13 +132,26 @@ const SocialCalendarView = () => {
     try {
       const res = await api.post(`/social-calendars/client/${selectedClient._id}/posts`, {
         ...postForm,
+        title: postForm.title || postForm.subject || 'Social Post',
         scheduledTime: postForm.scheduledTime || undefined,
         assignedTo: Array.isArray(postForm.assignedTo) ? postForm.assignedTo : [],
       })
       setCalendar(res.data?.calendar ?? res.data)
       setAssigneeSearch('')
       setAssigneeOpen(false)
-      setPostForm({ title: '', description: '', platform: 'Instagram', scheduledTime: '', status: 'Scheduled', referenceLink: '', assignedTo: [] })
+      setPostForm({
+        title: '',
+        contentType: 'Feed Post',
+        subject: '',
+        description: '',
+        carouselItems: [{ subject: '', description: '' }],
+        platform: 'Instagram',
+        scheduledTime: '',
+        status: 'Scheduled',
+        referenceLink: '',
+        referenceUpload: { fileName: '', mimeType: '', dataUrl: '' },
+        assignedTo: [],
+      })
       setShowAddPost(false)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error adding post')
@@ -141,11 +165,17 @@ const SocialCalendarView = () => {
       : ''
     setPostForm({
       title: post.title || '',
+      contentType: post.contentType || 'Feed Post',
+      subject: post.subject || '',
       description: post.description || '',
+      carouselItems: Array.isArray(post.carouselItems) && post.carouselItems.length > 0
+        ? post.carouselItems
+        : [{ subject: '', description: '' }],
       platform: post.platform || 'Instagram',
       scheduledTime,
       status: post.status || 'Scheduled',
       referenceLink: post.referenceLink || '',
+      referenceUpload: post.referenceUpload || { fileName: '', mimeType: '', dataUrl: '' },
       assignedTo: Array.isArray(post.assignedTo)
         ? post.assignedTo.map((a) => (typeof a === 'object' ? a._id : a)).filter(Boolean)
         : post.assignedTo ? [post.assignedTo._id || post.assignedTo] : [],
@@ -168,7 +198,19 @@ const SocialCalendarView = () => {
       setEditingPost(null)
       setAssigneeSearch('')
       setAssigneeOpen(false)
-      setPostForm({ title: '', description: '', platform: 'Instagram', scheduledTime: '', status: 'Scheduled', referenceLink: '', assignedTo: [] })
+      setPostForm({
+        title: '',
+        contentType: 'Feed Post',
+        subject: '',
+        description: '',
+        carouselItems: [{ subject: '', description: '' }],
+        platform: 'Instagram',
+        scheduledTime: '',
+        status: 'Scheduled',
+        referenceLink: '',
+        referenceUpload: { fileName: '', mimeType: '', dataUrl: '' },
+        assignedTo: [],
+      })
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error updating post')
     }
@@ -179,31 +221,83 @@ const SocialCalendarView = () => {
     setEditingPost(null)
     setAssigneeSearch('')
     setAssigneeOpen(false)
-    setPostForm({ title: '', description: '', platform: 'Instagram', scheduledTime: '', status: 'Scheduled', referenceLink: '', assignedTo: [] })
+    setPostForm({
+      title: '',
+      contentType: 'Feed Post',
+      subject: '',
+      description: '',
+      carouselItems: [{ subject: '', description: '' }],
+      platform: 'Instagram',
+      scheduledTime: '',
+      status: 'Scheduled',
+      referenceLink: '',
+      referenceUpload: { fileName: '', mimeType: '', dataUrl: '' },
+      assignedTo: [],
+    })
   }
 
   const handleDownloadXLS = () => {
     if (!selectedClient || !calendar?.posts?.length) return
-    const dataRows = calendar.posts.map((p) => [
-      p.title || '',
-      p.description || '',
-      p.platform || '',
-      p.scheduledTime ? new Date(p.scheduledTime).toLocaleString() : '',
-      p.status || '',
-      getAssignedNames(p.assignedTo),
-    ])
+    const dataRows = []
+    const monthLabel = new Date(calendarYear, calendarMonth, 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const dayDate = new Date(calendarYear, calendarMonth, day)
+      const dayPosts = posts.filter((p) => {
+        if (!p.scheduledTime) return false
+        const d = new Date(p.scheduledTime)
+        return d.getDate() === day && d.getMonth() === calendarMonth && d.getFullYear() === calendarYear
+      })
+
+      if (dayPosts.length === 0) {
+        dataRows.push([
+          dayDate.toLocaleDateString('en-IN'),
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ])
+      } else {
+        dayPosts.forEach((p) => {
+          const details =
+            p.contentType === 'Carousel' && Array.isArray(p.carouselItems) && p.carouselItems.length > 0
+              ? p.carouselItems
+                  .map((item, idx) => `Post ${idx + 1}: ${item.subject || ''} ${item.description || ''}`.trim())
+                  .join(' | ')
+              : `${p.subject || ''} ${p.description || ''}`.trim()
+
+          dataRows.push([
+            dayDate.toLocaleDateString('en-IN'),
+            p.title || '',
+            p.contentType || '',
+            details || '',
+            p.platform || '',
+            p.status || '',
+            p.clientReviewStatus || 'Pending',
+            p.referenceLink || p.referenceUpload?.fileName || '',
+            getAssignedNames(p.assignedTo),
+          ])
+        })
+      }
+    }
+
     const rows = [
       ['Client', selectedClient.clientName],
+      ['Month', monthLabel],
       ['Exported', new Date().toLocaleString()],
       [],
-      ['Title', 'Description', 'Platform', 'Scheduled Date', 'Status', 'Assigned To'],
+      ['Date', 'Title', 'Type', 'Subject/Description', 'Platform', 'Status', 'Client Review', 'Reference', 'Assigned To'],
       ...dataRows,
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
 
     // Set column widths so content is fully visible (wch = width in characters)
-    const headerLengths = [5, 11, 8, 14, 6, 11]
-    const colWidths = [0, 1, 2, 3, 4, 5].map((colIdx) => {
+    const headerLengths = [10, 10, 8, 20, 8, 8, 12, 12, 11]
+    const colWidths = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((colIdx) => {
       const maxContent = Math.max(
         headerLengths[colIdx],
         ...dataRows.map((r) => String(r[colIdx] || '').length)
@@ -256,15 +350,36 @@ const SocialCalendarView = () => {
     setPostForm((f) => ({
       ...f,
       title: '',
+      contentType: 'Feed Post',
+      subject: '',
       description: '',
+      carouselItems: [{ subject: '', description: '' }],
       platform: 'Instagram',
       scheduledTime,
       status: 'Scheduled',
       referenceLink: '',
+      referenceUpload: { fileName: '', mimeType: '', dataUrl: '' },
       assignedTo: [],
     }))
     setEditingPost(null)
     setShowAddPost(true)
+  }
+
+  const handleReferenceUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setPostForm((f) => ({
+        ...f,
+        referenceUpload: {
+          fileName: file.name,
+          mimeType: file.type || '',
+          dataUrl: typeof reader.result === 'string' ? reader.result : '',
+        },
+      }))
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleDayClick = (day) => {
@@ -438,11 +553,17 @@ const SocialCalendarView = () => {
                                 className='flex-1 min-w-0 text-left text-xs px-2 py-1 rounded truncate bg-cyan-100 text-cyan-800 hover:bg-cyan-200 cursor-pointer'
                               >
                                 {p.title}
+                                <span className={`ml-1 inline-flex px-1.5 py-0.5 rounded text-[9px] ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}>
+                                  {p.clientReviewStatus || 'Pending'}
+                                </span>
                                 {getAssignedNames(p.assignedTo) && <span className='block text-[10px] text-cyan-600 truncate'>→ {getAssignedNames(p.assignedTo)}</span>}
                               </button>
                             ) : (
                               <span className='flex-1 min-w-0 text-xs px-2 py-1 rounded truncate bg-cyan-100 text-cyan-800'>
                                 {p.title}
+                                <span className={`ml-1 inline-flex px-1.5 py-0.5 rounded text-[9px] ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}>
+                                  {p.clientReviewStatus || 'Pending'}
+                                </span>
                                 {getAssignedNames(p.assignedTo) && <span className='block text-[10px] text-cyan-600 truncate'>→ {getAssignedNames(p.assignedTo)}</span>}
                               </span>
                             )}
@@ -494,6 +615,9 @@ const SocialCalendarView = () => {
                             {new Date(p.scheduledTime).toLocaleDateString()} • {p.platform}
                             {getAssignedNames(p.assignedTo) && ` • ${getAssignedNames(p.assignedTo)}`}
                           </p>
+                          <span className={`inline-flex mt-1 px-2 py-0.5 rounded text-[10px] ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}>
+                            {p.clientReviewStatus || 'Pending'}
+                          </span>
                         </button>
                       ) : (
                         <div className='flex-1 min-w-0 -mx-2 px-2'>
@@ -502,6 +626,9 @@ const SocialCalendarView = () => {
                             {new Date(p.scheduledTime).toLocaleDateString()} • {p.platform}
                             {getAssignedNames(p.assignedTo) && ` • ${getAssignedNames(p.assignedTo)}`}
                           </p>
+                          <span className={`inline-flex mt-1 px-2 py-0.5 rounded text-[10px] ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}>
+                            {p.clientReviewStatus || 'Pending'}
+                          </span>
                         </div>
                       )}
                       {p.referenceLink && (
@@ -546,6 +673,111 @@ const SocialCalendarView = () => {
                   />
                 </div>
                 <div>
+                  <label className='block text-sm font-medium text-gray-700 mb-1'>Post Type</label>
+                  <select
+                    value={postForm.contentType}
+                    onChange={(e) => setPostForm((f) => ({ ...f, contentType: e.target.value }))}
+                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                  >
+                    {CONTENT_TYPES.map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {postForm.contentType === 'Carousel' ? (
+                <div className='space-y-2'>
+                  <div className='flex items-center justify-between'>
+                    <label className='block text-sm font-medium text-gray-700'>Carousel Slides</label>
+                    <button
+                      type='button'
+                      onClick={() =>
+                        setPostForm((f) => ({
+                          ...f,
+                          carouselItems: [...(f.carouselItems || []), { subject: '', description: '' }],
+                        }))
+                      }
+                      className='text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50'
+                    >
+                      + Add Slide
+                    </button>
+                  </div>
+                  {(postForm.carouselItems || []).map((item, index) => (
+                    <div key={index} className='border border-gray-200 rounded-lg p-3 space-y-2'>
+                      <div className='flex items-center justify-between'>
+                        <p className='text-xs font-semibold text-gray-600'>Post {index + 1}</p>
+                        {(postForm.carouselItems || []).length > 1 && (
+                          <button
+                            type='button'
+                            onClick={() =>
+                              setPostForm((f) => ({
+                                ...f,
+                                carouselItems: f.carouselItems.filter((_, idx) => idx !== index),
+                              }))
+                            }
+                            className='text-xs text-red-600 hover:text-red-700'
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type='text'
+                        value={item.subject}
+                        onChange={(e) =>
+                          setPostForm((f) => ({
+                            ...f,
+                            carouselItems: f.carouselItems.map((slide, idx) =>
+                              idx === index ? { ...slide, subject: e.target.value } : slide
+                            ),
+                          }))
+                        }
+                        placeholder='Subject'
+                        className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                      />
+                      <textarea
+                        value={item.description}
+                        onChange={(e) =>
+                          setPostForm((f) => ({
+                            ...f,
+                            carouselItems: f.carouselItems.map((slide, idx) =>
+                              idx === index ? { ...slide, description: e.target.value } : slide
+                            ),
+                          }))
+                        }
+                        rows={2}
+                        placeholder='Description'
+                        className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className='block text-sm font-medium text-gray-700 mb-1'>Subject</label>
+                    <input
+                      type='text'
+                      value={postForm.subject}
+                      onChange={(e) => setPostForm((f) => ({ ...f, subject: e.target.value }))}
+                      className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                      placeholder='Post subject'
+                    />
+                  </div>
+                  <div>
+                    <label className='block text-sm font-medium text-gray-700 mb-1'>Description</label>
+                    <textarea
+                      value={postForm.description}
+                      onChange={(e) => setPostForm((f) => ({ ...f, description: e.target.value }))}
+                      rows={3}
+                      className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                      placeholder='Post content...'
+                    />
+                  </div>
+                </>
+              )}
+              <div className='grid grid-cols-2 gap-4'>
+                <div>
                   <label className='block text-sm font-medium text-gray-700 mb-1'>Platform</label>
                   <select
                     value={postForm.platform}
@@ -557,18 +789,6 @@ const SocialCalendarView = () => {
                     ))}
                   </select>
                 </div>
-              </div>
-              <div>
-                <label className='block text-sm font-medium text-gray-700 mb-1'>Description</label>
-                <textarea
-                  value={postForm.description}
-                  onChange={(e) => setPostForm((f) => ({ ...f, description: e.target.value }))}
-                  rows={3}
-                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                  placeholder='Post content...'
-                />
-              </div>
-              <div className='grid grid-cols-2 gap-4'>
                 <div>
                   <label className='block text-sm font-medium text-gray-700 mb-1'>Scheduled Date & Time</label>
                   <input
@@ -592,15 +812,28 @@ const SocialCalendarView = () => {
                   </select>
                 </div>
               </div>
-              <div>
-                <label className='block text-sm font-medium text-gray-700 mb-1'>Reference Link <span className='text-gray-400 font-normal'>(optional)</span></label>
-                <input
-                  type='url'
-                  value={postForm.referenceLink}
-                  onChange={(e) => setPostForm((f) => ({ ...f, referenceLink: e.target.value }))}
-                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                  placeholder='https://...'
-                />
+              <div className='grid grid-cols-2 gap-4'>
+                <div>
+                  <label className='block text-sm font-medium text-gray-700 mb-1'>Reference Link <span className='text-gray-400 font-normal'>(optional)</span></label>
+                  <input
+                    type='url'
+                    value={postForm.referenceLink}
+                    onChange={(e) => setPostForm((f) => ({ ...f, referenceLink: e.target.value }))}
+                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                    placeholder='https://...'
+                  />
+                </div>
+                <div>
+                  <label className='block text-sm font-medium text-gray-700 mb-1'>Upload Reference <span className='text-gray-400 font-normal'>(optional)</span></label>
+                  <input
+                    type='file'
+                    onChange={handleReferenceUpload}
+                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                  />
+                  {postForm.referenceUpload?.fileName && (
+                    <p className='text-xs text-gray-500 mt-1 truncate'>{postForm.referenceUpload.fileName}</p>
+                  )}
+                </div>
               </div>
               <div ref={assigneeRef}>
                 <label className='block text-sm font-medium text-gray-700 mb-1'>Assign To <span className='text-gray-400 font-normal'>(optional, multiple)</span></label>

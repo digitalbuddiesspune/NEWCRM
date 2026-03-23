@@ -4,6 +4,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High', 'Urgent']
+const RECURRENCE_TYPES = [
+  { value: 'daily', label: 'Day(s)' },
+  { value: 'weekly', label: 'Week(s)' },
+  { value: 'monthly', label: 'Month(s)' },
+]
 
 const AssignTask = () => {
   const { user, canAssignTask } = useAuth()
@@ -20,6 +25,11 @@ const AssignTask = () => {
     assignedTo: '',
     priority: 'Medium',
     dueDate: '',
+    isRecurring: false,
+    recurrenceType: 'daily',
+    recurrenceInterval: 1,
+    recurrenceStartDate: new Date().toISOString().slice(0, 10),
+    recurrenceEndDate: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -72,6 +82,12 @@ const AssignTask = () => {
         assignedBy: user._id,
         priority: form.priority,
         dueDate: form.dueDate || undefined,
+        isRecurring: form.isRecurring,
+        recurrenceEnabled: form.isRecurring,
+        recurrenceType: form.isRecurring ? form.recurrenceType : undefined,
+        recurrenceInterval: form.isRecurring ? Number(form.recurrenceInterval) || 1 : undefined,
+        recurrenceStartDate: form.isRecurring ? form.recurrenceStartDate || form.dueDate || undefined : undefined,
+        recurrenceEndDate: form.isRecurring ? form.recurrenceEndDate || undefined : undefined,
       })
       navigate(projectIdFromUrl ? '/projects' : '/tasks')
     } catch (err) {
@@ -181,6 +197,75 @@ const AssignTask = () => {
           </div>
         </div>
 
+        <div className='rounded-lg border border-gray-200 p-4 bg-gray-50'>
+          <div className='flex items-center justify-between gap-3'>
+            <div>
+              <p className='text-sm font-semibold text-gray-800'>Auto Task</p>
+              <p className='text-xs text-gray-600 mt-0.5'>
+                Create a recurring task for this employee automatically.
+              </p>
+            </div>
+            <button
+              type='button'
+              onClick={() => setForm((f) => ({ ...f, isRecurring: !f.isRecurring }))}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
+                form.isRecurring
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-700 border-gray-300'
+              }`}
+            >
+              {form.isRecurring ? 'Enabled' : 'Enable'}
+            </button>
+          </div>
+
+          {form.isRecurring && (
+            <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4'>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Repeat Every</label>
+                <input
+                  type='number'
+                  min='1'
+                  value={form.recurrenceInterval}
+                  onChange={(e) => setForm((f) => ({ ...f, recurrenceInterval: e.target.value }))}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                />
+              </div>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Frequency</label>
+                <select
+                  value={form.recurrenceType}
+                  onChange={(e) => setForm((f) => ({ ...f, recurrenceType: e.target.value }))}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                >
+                  {RECURRENCE_TYPES.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Start Date</label>
+                <input
+                  type='date'
+                  value={form.recurrenceStartDate}
+                  onChange={(e) => setForm((f) => ({ ...f, recurrenceStartDate: e.target.value }))}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                />
+              </div>
+              <div className='sm:col-span-2'>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>End Date (Optional)</label>
+                <input
+                  type='date'
+                  value={form.recurrenceEndDate}
+                  onChange={(e) => setForm((f) => ({ ...f, recurrenceEndDate: e.target.value }))}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         {error && <p className='text-red-600 text-sm'>{error}</p>}
 
         <div className='flex gap-3 pt-2'>
@@ -189,7 +274,7 @@ const AssignTask = () => {
             disabled={loading}
             className='bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed'
           >
-            {loading ? 'Assigning...' : 'Assign Task'}
+            {loading ? 'Saving...' : form.isRecurring ? 'Assign Auto Task' : 'Assign Task'}
           </button>
           <button
             type='button'

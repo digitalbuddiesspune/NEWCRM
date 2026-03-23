@@ -36,6 +36,42 @@ const taskSchema = new mongoose.Schema({
   dueDate: {
     type: Date,
   },
+  isRecurringTemplate: {
+    type: Boolean,
+    default: false,
+  },
+  recurrenceEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  recurrenceType: {
+    type: String,
+    enum: ['daily', 'weekly', 'monthly'],
+  },
+  recurrenceInterval: {
+    type: Number,
+    default: 1,
+  },
+  recurrenceStartDate: {
+    type: Date,
+  },
+  recurrenceEndDate: {
+    type: Date,
+  },
+  nextRunAt: {
+    type: Date,
+  },
+  lastGeneratedAt: {
+    type: Date,
+  },
+  recurringParentTask: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Task',
+    default: null,
+  },
+  recurringScheduledFor: {
+    type: Date,
+  },
 }, { timestamps: true });
 
 const Task = mongoose.model('Task', taskSchema);

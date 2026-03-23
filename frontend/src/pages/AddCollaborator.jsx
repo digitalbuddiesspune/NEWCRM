@@ -14,6 +14,7 @@ const AddCollaborator = () => {
     email: '',
     city: '',
     state: '',
+    pincode: '',
     rate: '',
     rateType: '',
     description: '',
@@ -23,7 +24,37 @@ const AddCollaborator = () => {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [states, setStates] = useState([])
+  const [cities, setCities] = useState([])
   const navigate = useNavigate()
+
+  const PINCODE_REGEX = /^[1-9][0-9]{5}$/
+
+  const fetchCities = async (code) => {
+    if (!code) {
+      setCities([])
+      return
+    }
+    try {
+      const res = await api.get('/locations/cities', { params: { stateCode: code } })
+      setCities(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      setCities([])
+    }
+  }
+
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const res = await api.get('/locations/states')
+        const list = Array.isArray(res.data) ? res.data : []
+        setStates(list)
+      } catch {
+        setStates([])
+      }
+    }
+    fetchStates()
+  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -37,6 +68,7 @@ const AddCollaborator = () => {
           email: c.email ?? '',
           city: c.city ?? '',
           state: c.state ?? '',
+          pincode: c.pincode ?? '',
           rate: c.rate != null && c.rate !== '' ? String(c.rate) : '',
           rateType: c.rateType ?? '',
           description: c.description ?? '',
@@ -51,6 +83,13 @@ const AddCollaborator = () => {
     fetchCollaborator()
   }, [id])
 
+  useEffect(() => {
+    if (!form.state || states.length === 0) return
+    const matched = states.find((s) => s.name === form.state)
+    const code = matched?.iso2 || ''
+    if (code) fetchCities(code)
+  }, [form.state, states])
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm((f) => ({ ...f, [name]: value }))
@@ -60,6 +99,10 @@ const AddCollaborator = () => {
     e.preventDefault()
     if (!form.name?.trim()) {
       setError('Name is required')
+      return
+    }
+    if (form.pincode && !PINCODE_REGEX.test(form.pincode)) {
+      setError('Please enter a valid 6-digit pincode')
       return
     }
     setLoading(true)
@@ -123,12 +166,42 @@ const AddCollaborator = () => {
             {/* Row 2: 4 fields */}
             <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4'>
               <div>
-                <label className='block text-sm font-medium text-gray-700'>City</label>
-                <input name='city' value={form.city} onChange={handleChange} className={inputClass} placeholder='City' />
+                <label className='block text-sm font-medium text-gray-700'>State</label>
+                <select
+                  name='state'
+                  value={form.state}
+                  onChange={(e) => {
+                    const selectedName = e.target.value
+                    const selected = states.find((s) => s.name === selectedName)
+                    setForm((f) => ({ ...f, state: selectedName, city: '' }))
+                    fetchCities(selected?.iso2 || '')
+                  }}
+                  className={inputClass}
+                >
+                  <option value=''>Select state</option>
+                  {states.map((s) => (
+                    <option key={s.iso2 || s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className='block text-sm font-medium text-gray-700'>State</label>
-                <input name='state' value={form.state} onChange={handleChange} className={inputClass} placeholder='State' />
+                <label className='block text-sm font-medium text-gray-700'>City</label>
+                <select
+                  name='city'
+                  value={form.city}
+                  onChange={handleChange}
+                  className={inputClass}
+                  disabled={!form.state}
+                >
+                  <option value=''>{form.state ? 'Select city' : 'Select state first'}</option>
+                  {cities.map((c) => (
+                    <option key={c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className='block text-sm font-medium text-gray-700'>Pincode</label>
+                <input name='pincode' value={form.pincode || ''} onChange={handleChange} className={inputClass} placeholder='6-digit pincode' maxLength={6} />
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-700'>Rate</label>

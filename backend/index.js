@@ -18,7 +18,10 @@ import leaveRouter from './routes/leaveRoute.js';
 import billingRouter from './routes/billingRoute.js';
 import companyRouter from './routes/companyRoute.js';
 import expenseRouter from './routes/expenseRoute.js';
+import clientProfileRouter from './routes/clientProfileRoute.js';
+import locationRouter from './routes/locationRoute.js';
 import { autoCheckoutForDay, autoCheckoutPreviousDays } from './utils/attendanceAutoCheckout.js';
+import { processRecurringTasks } from './utils/recurringTaskScheduler.js';
 
 dotenv.config();
 
@@ -60,6 +63,21 @@ const scheduleDailyAttendanceAutoCheckout = () => {
 };
 scheduleDailyAttendanceAutoCheckout();
 
+// Auto task scheduler: generate recurring tasks from templates
+const runRecurringTaskScheduler = async () => {
+  try {
+    const { processedTemplates, generatedCount } = await processRecurringTasks();
+    if (processedTemplates > 0 || generatedCount > 0) {
+      console.log(`Recurring tasks processed: ${processedTemplates}, generated: ${generatedCount}`);
+    }
+  } catch (e) {
+    console.error('Recurring task scheduler failed:', e?.message || e);
+  }
+};
+
+runRecurringTaskScheduler();
+setInterval(runRecurringTaskScheduler, 10 * 60 * 1000);
+
 
 app.use(
   cors({
@@ -98,6 +116,8 @@ app.use('/api/v1', leaveRouter);
 app.use('/api/v1', billingRouter);
 app.use('/api/v1', companyRouter);
 app.use('/api/v1', expenseRouter);
+app.use('/api/v1', clientProfileRouter);
+app.use('/api/v1', locationRouter);
 
 // Server start
 app.listen(PORT, '0.0.0.0', () => {

@@ -38,6 +38,18 @@ const clientSchema = new mongoose.Schema({
   address: {
     type: String,
   },
+  city: {
+    type: String,
+    default: '',
+  },
+  state: {
+    type: String,
+    default: '',
+  },
+  pincode: {
+    type: String,
+    default: '',
+  },
   gstin: { type: String, default: '' },
   gstCode: { type: String, default: '' },
   onboardBy: {

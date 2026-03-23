@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
 import { BookIcon, ProjectsIcon, UsersIcon } from '../../components/Icons'
+import { useAuth } from '../../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
 import {
   BarChart,
   Bar,
@@ -45,9 +47,16 @@ const ChartCard = ({ title, children }) => {
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const DashboardView = () => {
+  const { user, hasFullAccess } = useAuth()
+  const navigate = useNavigate()
+  const isFullAccess = hasFullAccess()
   const [clients, setClients] = useState([])
+  const [clientProfiles, setClientProfiles] = useState([])
   const [projects, setProjects] = useState([])
   const [employees, setEmployees] = useState([])
+  const [myTasks, setMyTasks] = useState([])
+  const [myLeads, setMyLeads] = useState([])
+  const [selectedMeetingLeadId, setSelectedMeetingLeadId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [chartData, setChartData] = useState([])
@@ -58,6 +67,7 @@ const DashboardView = () => {
   const yearOptions = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 2 + i)
 
   useEffect(() => {
+    if (!isFullAccess) return
     const fetchChartData = async () => {
       try {
         setChartLoading(true)
@@ -71,23 +81,42 @@ const DashboardView = () => {
       }
     }
     fetchChartData()
-  }, [filterYear, filterDepartment])
+  }, [filterYear, filterDepartment, isFullAccess])
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
-        const [clientsRes, projectsRes, employeesRes] = await Promise.all([
-          api.get('/clients'),
-          api.get('/projects'),
-          api.get('/employees'),
-        ])
-        const clientsList = Array.isArray(clientsRes.data) ? clientsRes.data : clientsRes.data?.data || []
-        const projectsList = Array.isArray(projectsRes.data) ? projectsRes.data : projectsRes.data?.data || []
-        const employeesList = Array.isArray(employeesRes.data) ? employeesRes.data : employeesRes.data?.data || []
-        setClients(Array.isArray(clientsList) ? clientsList : [])
-        setProjects(Array.isArray(projectsList) ? projectsList : [])
-        setEmployees(Array.isArray(employeesList) ? employeesList : [])
+        if (isFullAccess) {
+          const [clientsRes, projectsRes, employeesRes, profilesRes] = await Promise.all([
+            api.get('/clients'),
+            api.get('/projects'),
+            api.get('/employees'),
+            api.get('/client-profiles'),
+          ])
+          const clientsList = Array.isArray(clientsRes.data) ? clientsRes.data : clientsRes.data?.data || []
+          const projectsList = Array.isArray(projectsRes.data) ? projectsRes.data : projectsRes.data?.data || []
+          const employeesList = Array.isArray(employeesRes.data) ? employeesRes.data : employeesRes.data?.data || []
+          const profilesList = Array.isArray(profilesRes.data) ? profilesRes.data : profilesRes.data?.data || []
+          setClients(Array.isArray(clientsList) ? clientsList : [])
+          setProjects(Array.isArray(projectsList) ? projectsList : [])
+          setEmployees(Array.isArray(employeesList) ? employeesList : [])
+          setClientProfiles(Array.isArray(profilesList) ? profilesList : [])
+        } else if (user?._id) {
+          const [tasksRes, leadsRes] = await Promise.all([
+            api.get('/tasks', { params: { employeeId: user._id } }),
+            api.get('/leads'),
+          ])
+          setMyTasks(Array.isArray(tasksRes.data) ? tasksRes.data : [])
+          const allLeads = Array.isArray(leadsRes.data) ? leadsRes.data : []
+          const relatedLeads = allLeads.filter((l) => {
+            const generatedById = l.generatedBy?._id || l.generatedBy
+            const meetingPerson = (l.meetingPersonName || '').toLowerCase()
+            const userName = (user?.name || '').toLowerCase()
+            return String(generatedById) === String(user._id) || (meetingPerson && meetingPerson === userName)
+          })
+          setMyLeads(relatedLeads)
+        }
       } catch (err) {
         setError(err.message || 'Error loading dashboard data')
       } finally {
@@ -95,7 +124,7 @@ const DashboardView = () => {
       }
     }
     fetchData()
-  }, [])
+  }, [isFullAccess, user?._id, user?.name])
 
   const recentActivity = [
     ...projects.map((p) => ({
@@ -122,6 +151,30 @@ const DashboardView = () => {
     .slice(0, 10)
 
   const activeProjects = projects.filter((p) => p.status === 'In Progress').length
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const todayEnd = new Date(todayStart)
+  todayEnd.setDate(todayEnd.getDate() + 1)
+  const todayTasks = myTasks.filter((t) => {
+    if (!t?.dueDate) return false
+    const d = new Date(t.dueDate)
+    return d >= todayStart && d < todayEnd
+  })
+  const pendingTasks = myTasks.filter((t) => ['Pending', 'In Progress'].includes(t.status))
+  const completedTasks = myTasks.filter((t) => t.status === 'Completed')
+  const delayedTasks = myTasks.filter((t) => {
+    if (!t?.dueDate) return false
+    const d = new Date(t.dueDate)
+    return d < new Date() && !['Completed', 'Cancelled'].includes(t.status)
+  })
+  const meetings = myLeads.filter((l) => l.status === 'Meeting Schedule')
+  const attendedMeetings = meetings.filter((m) => m.meetingInfoSent === true)
+  const notAttendedMeetings = meetings.filter((m) => m.meetingInfoSent !== true)
+  const totalFollowUps = myLeads.reduce((sum, l) => sum + (Array.isArray(l.followUps) ? l.followUps.length : 0), 0)
+  const createdMeetings = myLeads.filter((l) => {
+    const generatedById = l.generatedBy?._id || l.generatedBy
+    return l.status === 'Meeting Schedule' && String(generatedById) === String(user?._id)
+  })
 
   return (
     <div className='p-8'>
@@ -136,9 +189,10 @@ const DashboardView = () => {
       ) : error ? (
         <p className='text-red-600 text-sm'>{error}</p>
       ) : (
+        isFullAccess ? (
         <>
           {/* Stats Grid */}
-          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8'>
+          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8'>
             <StatCard
               title='Total Clients'
               value={clients.length}
@@ -162,6 +216,14 @@ const DashboardView = () => {
               icon={<UsersIcon />}
               color='border-green-500 bg-gradient-to-br from-green-50 to-green-100'
               iconColor='text-green-500'
+            />
+            <StatCard
+              title='Client Profiles'
+              value={clientProfiles.length}
+              secondary={{ label: 'Managed', value: clientProfiles.length }}
+              icon={<BookIcon />}
+              color='border-amber-500 bg-gradient-to-br from-amber-50 to-amber-100'
+              iconColor='text-amber-500'
             />
           </div>
 
@@ -269,6 +331,57 @@ const DashboardView = () => {
             </ChartCard>
           </div>
         </>
+        ) : (
+          <>
+            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8'>
+              <StatCard title='Total Tasks (Today)' value={todayTasks.length} icon={<ProjectsIcon />} color='border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100' iconColor='text-blue-500' />
+              <StatCard title='Total Pending Tasks' value={pendingTasks.length} icon={<ProjectsIcon />} color='border-amber-500 bg-gradient-to-br from-amber-50 to-amber-100' iconColor='text-amber-500' />
+              <StatCard title='Total Completed Tasks' value={completedTasks.length} icon={<ProjectsIcon />} color='border-green-500 bg-gradient-to-br from-green-50 to-green-100' iconColor='text-green-500' />
+              <StatCard title='Total Delayed Tasks' value={delayedTasks.length} icon={<ProjectsIcon />} color='border-red-500 bg-gradient-to-br from-red-50 to-red-100' iconColor='text-red-500' />
+              <StatCard title='Total Meetings' value={meetings.length} icon={<UsersIcon />} color='border-purple-500 bg-gradient-to-br from-purple-50 to-purple-100' iconColor='text-purple-500' />
+              <StatCard title='Meetings Attended' value={attendedMeetings.length} icon={<UsersIcon />} color='border-green-500 bg-gradient-to-br from-green-50 to-green-100' iconColor='text-green-500' />
+              <StatCard title="Meetings Didn't Attend" value={notAttendedMeetings.length} icon={<UsersIcon />} color='border-gray-500 bg-gradient-to-br from-gray-50 to-gray-100' iconColor='text-gray-500' />
+              <StatCard title='Total Follow Ups' value={totalFollowUps} icon={<BookIcon />} color='border-cyan-500 bg-gradient-to-br from-cyan-50 to-cyan-100' iconColor='text-cyan-500' />
+            </div>
+
+            <ChartCard title='Meetings'>
+              <div className='grid grid-cols-1 md:grid-cols-3 gap-3 items-end'>
+                <div className='md:col-span-2'>
+                  <label className='block text-sm font-medium text-gray-700 mb-2'>Created Meetings</label>
+                  <select
+                    value={selectedMeetingLeadId}
+                    onChange={(e) => setSelectedMeetingLeadId(e.target.value)}
+                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                  >
+                    <option value=''>Select created meeting</option>
+                    {createdMeetings.map((m) => (
+                      <option key={m._id} value={m._id}>
+                        {(m.businessName || m.name || 'Meeting')} - {m.meetingTime ? new Date(m.meetingTime).toLocaleString() : 'No time'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className='flex flex-wrap gap-2'>
+                  <button
+                    type='button'
+                    onClick={() => selectedMeetingLeadId && navigate(`/leads/view/${selectedMeetingLeadId}`)}
+                    disabled={!selectedMeetingLeadId}
+                    className='px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 disabled:opacity-50'
+                  >
+                    Open Meeting
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => navigate('/add-lead?meeting=1')}
+                    className='px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700'
+                  >
+                    Create New Meeting
+                  </button>
+                </div>
+              </div>
+            </ChartCard>
+          </>
+        )
       )}
     </div>
   )

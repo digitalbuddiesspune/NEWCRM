@@ -2,7 +2,17 @@ import mongoose from 'mongoose';
 
 const socialMediaPostSchema = new mongoose.Schema({
   title: { type: String, required: true },
+  contentType: {
+    type: String,
+    enum: ['Reel', 'Feed Post', 'Carousel', 'Story'],
+    default: 'Feed Post',
+  },
+  subject: { type: String, default: '' },
   description: { type: String },
+  carouselItems: [{
+    subject: { type: String, default: '' },
+    description: { type: String, default: '' },
+  }],
   platform: {
     type: String,
     enum: ['All', 'Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other'],
@@ -15,6 +25,24 @@ const socialMediaPostSchema = new mongoose.Schema({
     default: 'Scheduled',
   },
   referenceLink: { type: String },
+  referenceUpload: {
+    fileName: { type: String, default: '' },
+    mimeType: { type: String, default: '' },
+    dataUrl: { type: String, default: '' },
+  },
+  clientReviewStatus: {
+    type: String,
+    enum: ['Pending', 'Accepted', 'Rejected', 'Need Changes'],
+    default: 'Pending',
+  },
+  clientNote: { type: String, default: '' },
+  clientDecisionAt: { type: Date },
+  uploadedLinks: [{
+    platform: { type: String, default: '' },
+    url: { type: String, default: '' },
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+    addedAt: { type: Date, default: Date.now },
+  }],
   assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Employee' }],
 }, { timestamps: true });
 
@@ -24,6 +52,7 @@ const socialMediaCalendarSchema = new mongoose.Schema({
     ref: 'Client',
     required: true,
   },
+  shareToken: { type: String, index: true },
   posts: [socialMediaPostSchema],
 }, { timestamps: true });
 

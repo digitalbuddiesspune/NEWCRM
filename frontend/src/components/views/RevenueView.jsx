@@ -2,12 +2,24 @@ import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
 import { useNavigate } from 'react-router-dom'
 
+const getCurrentMonthRange = () => {
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  return {
+    from: monthStart.toISOString().slice(0, 10),
+    to: monthEnd.toISOString().slice(0, 10),
+  }
+}
+
 const RevenueView = () => {
   const [billings, setBillings] = useState([])
-  const [salaries, setSalaries] = useState([])
+  const [employees, setEmployees] = useState([])
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [dateFrom, setDateFrom] = useState(() => getCurrentMonthRange().from)
+  const [dateTo, setDateTo] = useState(() => getCurrentMonthRange().to)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -15,13 +27,13 @@ const RevenueView = () => {
       try {
         setLoading(true)
         setError(null)
-        const [billingsRes, salariesRes, expensesRes] = await Promise.all([
+        const [billingsRes, employeesRes, expensesRes] = await Promise.all([
           api.get('/billing'),
-          api.get('/salaries').catch(() => ({ data: [] })),
+          api.get('/employees').catch(() => ({ data: [] })),
           api.get('/expenses').catch(() => ({ data: [] })),
         ])
         setBillings(Array.isArray(billingsRes.data) ? billingsRes.data : [])
-        setSalaries(Array.isArray(salariesRes.data) ? salariesRes.data : salariesRes.data?.data ?? [])
+        setEmployees(Array.isArray(employeesRes.data) ? employeesRes.data : employeesRes.data?.data ?? [])
         setExpenses(Array.isArray(expensesRes.data) ? expensesRes.data : expensesRes.data?.data ?? [])
       } catch (err) {
         setError(err.message || 'Error fetching revenue data')
@@ -32,12 +44,36 @@ const RevenueView = () => {
     fetchData()
   }, [])
 
-  const totalRevenue = billings.reduce((sum, b) => sum + (Number(b.paymentDetails?.amount) || 0), 0)
-  const totalSalaries = salaries.reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
-  const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+  const getBillingDate = (billing) => billing?.paymentDetails?.paymentDate || billing?.createdAt || null
+  const getExpenseDate = (expense) => expense?.date || expense?.createdAt || null
+
+  const isWithinSelectedRange = (value) => {
+    if (!value) return false
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return false
+
+    if (dateFrom) {
+      const from = new Date(dateFrom)
+      from.setHours(0, 0, 0, 0)
+      if (date < from) return false
+    }
+    if (dateTo) {
+      const to = new Date(dateTo)
+      to.setHours(23, 59, 59, 999)
+      if (date > to) return false
+    }
+    return true
+  }
+
+  const filteredBillings = billings.filter((b) => isWithinSelectedRange(getBillingDate(b)))
+  const filteredExpenses = expenses.filter((e) => isWithinSelectedRange(getExpenseDate(e)))
+
+  const totalRevenue = filteredBillings.reduce((sum, b) => sum + (Number(b.paymentDetails?.amount) || 0), 0)
+  const totalSalaries = employees.reduce((sum, emp) => sum + (Number(emp.salary) || 0), 0)
+  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
   const netAmount = totalRevenue - totalSalaries - totalExpenses
 
-  const revenueEntries = billings
+  const revenueEntries = filteredBillings
     .filter((b) => (Number(b.paymentDetails?.amount) || 0) > 0)
     .sort((a, b) => new Date(b.paymentDetails?.paymentDate || b.createdAt || 0) - new Date(a.paymentDetails?.paymentDate || a.createdAt || 0))
 
@@ -59,6 +95,40 @@ const RevenueView = () => {
         <p className='text-gray-600 text-sm mt-1'>All revenue from billing payments.</p>
       </div>
 
+      <div className='mb-6 bg-white rounded-xl shadow border border-gray-200 p-4'>
+        <div className='flex flex-wrap items-end gap-3'>
+          <div>
+            <label className='block text-xs font-medium text-gray-600 mb-1'>From</label>
+            <input
+              type='date'
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+            />
+          </div>
+          <div>
+            <label className='block text-xs font-medium text-gray-600 mb-1'>To</label>
+            <input
+              type='date'
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+            />
+          </div>
+          <button
+            type='button'
+            onClick={() => {
+              const currentMonth = getCurrentMonthRange()
+              setDateFrom(currentMonth.from)
+              setDateTo(currentMonth.to)
+            }}
+            className='px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50'
+          >
+            Current Month
+          </button>
+        </div>
+      </div>
+
       {error && (
         <div className='mb-4 rounded-lg bg-red-50 border border-red-100 px-3 py-2'>
           <p className='text-red-600 text-sm'>{error}</p>
@@ -78,12 +148,12 @@ const RevenueView = () => {
             <div className='rounded-xl border border-gray-200 bg-white p-5 shadow-sm'>
               <h2 className='text-sm font-medium text-gray-500 uppercase tracking-wider'>Total Salaries</h2>
               <p className='text-2xl font-bold text-amber-700 mt-1'>₹{formatINR(totalSalaries)}</p>
-              <p className='text-sm text-gray-500 mt-1'>{salaries.length} record(s)</p>
+              <p className='text-sm text-gray-500 mt-1'>{employees.length} employee(s)</p>
             </div>
             <div className='rounded-xl border border-gray-200 bg-white p-5 shadow-sm'>
               <h2 className='text-sm font-medium text-gray-500 uppercase tracking-wider'>Other Expenses</h2>
               <p className='text-2xl font-bold text-red-700 mt-1'>₹{formatINR(totalExpenses)}</p>
-              <p className='text-sm text-gray-500 mt-1'>{expenses.length} expense(s)</p>
+              <p className='text-sm text-gray-500 mt-1'>{filteredExpenses.length} expense(s)</p>
             </div>
             <div className='rounded-xl border border-gray-200 bg-white p-5 shadow-sm'>
               <h2 className='text-sm font-medium text-gray-500 uppercase tracking-wider'>Net</h2>
@@ -110,14 +180,14 @@ const RevenueView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.length === 0 ? (
+                  {filteredExpenses.length === 0 ? (
                     <tr>
                       <td colSpan={4} className='px-4 py-8 text-center text-gray-500'>
-                        No other expenses recorded yet.
+                        No other expenses found in selected range.
                       </td>
                     </tr>
                   ) : (
-                    [...expenses]
+                    [...filteredExpenses]
                       .sort((a, b) => new Date(b.date) - new Date(a.date))
                       .map((e) => (
                         <tr key={e._id} className='border-b hover:bg-gray-50'>

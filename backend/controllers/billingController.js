@@ -1,4 +1,5 @@
 import Billing from '../models/billing.js';
+import { syncClientProfile } from '../utils/clientProfileSync.js';
 
 /** Financial year (India: Apr–Mar). Returns ending year e.g. 2026 for FY 2025-26 */
 function getFinancialYearEnd(date = new Date()) {
@@ -71,6 +72,7 @@ export const createBilling = async (req, res) => {
     const invoiceNumber = `${prefix}${String(seq).padStart(3, '0')}`;
     const billing = new Billing({ ...req.body, invoiceNumber });
     await billing.save();
+    await syncClientProfile({ clientId: billing.client });
     const populated = await Billing.findById(billing._id)
       .populate('client')
       .populate('projects.project');
@@ -132,6 +134,7 @@ export const getBillingTracking = async (req, res) => {
 
 export const updateBilling = async (req, res) => {
   try {
+    const previous = await Billing.findById(req.params.id).select('client');
     const updated = await Billing.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
@@ -139,6 +142,8 @@ export const updateBilling = async (req, res) => {
       .populate('client')
       .populate('projects.project');
     if (!updated) return res.status(404).json({ message: 'Billing not found' });
+    if (previous?.client) await syncClientProfile({ clientId: previous.client });
+    if (updated?.client) await syncClientProfile({ clientId: updated.client });
     res.status(200).json({ message: 'Billing updated', billing: withDynamicRemainingCost(updated) });
   } catch (error) {
     res.status(500).json({ message: 'Error updating billing', error });
@@ -149,6 +154,7 @@ export const deleteBilling = async (req, res) => {
   try {
     const deleted = await Billing.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: 'Billing not found' });
+    if (deleted?.client) await syncClientProfile({ clientId: deleted.client });
     res.status(200).json({ message: 'Billing deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting billing', error });
