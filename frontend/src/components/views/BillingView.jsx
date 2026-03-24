@@ -161,12 +161,12 @@ const BillingView = () => {
           </div>
           <div className='overflow-x-auto'>
             <table className='w-full text-sm'>
-              <thead>
-                <tr className='text-left border-b bg-gray-50'>
-                  <th className='px-4 py-3 font-semibold text-gray-700'>Project</th>
-                  <th className='px-4 py-3 text-right font-semibold text-gray-700'>Project Cost</th>
-                  <th className='px-4 py-3 text-right font-semibold text-gray-700'>Total Paid</th>
-                  <th className='px-4 py-3 text-right font-semibold text-gray-700'>Remaining</th>
+              <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Project</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Project Cost</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Total Paid</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Remaining</th>
                 </tr>
               </thead>
               <tbody>
@@ -189,14 +189,14 @@ const BillingView = () => {
       ) : (
         <div className='bg-white rounded-xl shadow border border-gray-200 overflow-x-auto'>
           <table className='w-full table-auto text-sm'>
-            <thead>
-              <tr className='text-left border-b bg-gray-50'>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Type</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Company</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Client</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Paid (this bill)</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Remaining</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Actions</th>
+            <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+              <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Type</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Company</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Paid (this bill)</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Remaining</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>
               </tr>
             </thead>
             <tbody>

@@ -155,17 +155,17 @@ const ClientProfilesView = () => {
       ) : (
         <div className='bg-white rounded-lg shadow overflow-x-auto border border-gray-100'>
           <table className='w-full table-auto text-sm'>
-            <thead>
-              <tr className='text-center border-b bg-gray-50'>
-                <th className='px-4 py-3'>Client</th>
-                <th className='px-4 py-3'>Project</th>
-                <th className='px-4 py-3'>Tasks (Created / Completed / Pending / Delayed)</th>
-                <th className='px-4 py-3'>Invoices</th>
-                <th className='px-4 py-3'>Paid</th>
-                <th className='px-4 py-3'>Pending</th>
-                <th className='px-4 py-3'>Project Deadline</th>
-                <th className='px-4 py-3'>Social Calendars</th>
-                <th className='px-4 py-3'>Actions</th>
+            <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+              <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Project</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Tasks (Created / Completed / Pending / Delayed)</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Invoices</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Paid</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Pending</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Project Deadline</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Social Calendars</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>
               </tr>
             </thead>
             <tbody>

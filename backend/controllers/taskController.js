@@ -98,15 +98,17 @@ export const createTask = async (req, res) => {
       });
     }
 
+    const initialStatus = status || 'Pending';
     const task = new Task({
       project,
       title,
       description,
       assignedTo,
       assignedBy,
-      status: status || 'Pending',
+      status: initialStatus,
       priority: priority || 'Medium',
       dueDate: dueDate ? new Date(dueDate) : undefined,
+      completedAt: initialStatus === 'Completed' ? new Date() : null,
       isRecurringTemplate: false,
       recurrenceEnabled: false,
     });
@@ -205,7 +207,10 @@ export const getTasks = async (req, res) => {
 export const getTaskById = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id)
-      .populate('project')
+      .populate({
+        path: 'project',
+        populate: { path: 'client', select: 'clientName clientNumber mailId businessType' },
+      })
       .populate('assignedTo')
       .populate('assignedBy');
     if (!task) return res.status(404).json({ message: 'Task not found' });
@@ -217,10 +222,18 @@ export const getTaskById = async (req, res) => {
 
 export const updateTask = async (req, res) => {
   try {
-    const existing = await Task.findById(req.params.id).select('project');
+    const existing = await Task.findById(req.params.id).select('project status');
     if (!existing) return res.status(404).json({ message: 'Task not found' });
 
-    const updated = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const nextStatus = req.body.status !== undefined ? req.body.status : existing.status;
+    const payload = { ...req.body };
+    if (nextStatus === 'Completed' && existing.status !== 'Completed') {
+      payload.completedAt = payload.completedAt || new Date();
+    } else if (nextStatus !== 'Completed' && existing.status === 'Completed') {
+      payload.completedAt = null;
+    }
+
+    const updated = await Task.findByIdAndUpdate(req.params.id, payload, { new: true })
       .populate('project')
       .populate('assignedTo')
       .populate('assignedBy');

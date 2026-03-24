@@ -1,9 +1,38 @@
+import mongoose from 'mongoose';
 import Project from '../models/project.js';
-import { syncClientProfile } from '../utils/clientProfileSync.js';
+import Billing from '../models/billing.js';
+import Task from '../models/task.js';
+import { syncClientProfile, calculateBillingSummary } from '../utils/clientProfileSync.js';
+import { computeTracking, withDynamicRemainingCost } from './billingController.js';
+
+const normalizeProjectPayload = (body = {}) => {
+  const normalized = { ...body };
+  const emptyToNullFields = ['projectManager', 'endDate', 'deadline'];
+  for (const field of emptyToNullFields) {
+    if (normalized[field] === '') normalized[field] = null;
+  }
+  if (normalized.client === '') normalized.client = null;
+  if (!Array.isArray(normalized.teamMembers)) normalized.teamMembers = [];
+  normalized.teamMembers = normalized.teamMembers.filter(Boolean);
+  return normalized;
+};
+
+const getProjectErrorMessage = (error, fallback) => {
+  if (!error) return fallback;
+  if (error.name === 'ValidationError') {
+    const first = Object.values(error.errors || {})[0];
+    return first?.message || error.message || fallback;
+  }
+  if (error.name === 'CastError') {
+    return `Invalid value for ${error.path}`;
+  }
+  return error.message || fallback;
+};
 
 // Create a new project
 export const createProject = async (req, res) => {
   try {
+    const payload = normalizeProjectPayload(req.body);
     const {
       projectName,
       department,
@@ -20,7 +49,7 @@ export const createProject = async (req, res) => {
       teamMembers,
       services,
       notes,
-    } = req.body;
+    } = payload;
 
     const newProject = new Project({
       projectName,
@@ -51,7 +80,9 @@ export const createProject = async (req, res) => {
       project: populated,
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error creating project', error });
+    console.error('createProject failed:', error);
+    const status = ['ValidationError', 'CastError'].includes(error?.name) ? 400 : 500;
+    res.status(status).json({ message: getProjectErrorMessage(error, 'Error creating project') });
   }
 };
 
@@ -123,6 +154,122 @@ export const getProjects = async (req, res) => {
   }
 };
 
+/** Aggregated dashboard for one project: client context, billing lines, tasks, activity */
+export const getProjectDashboard = async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({ message: 'Invalid project id' });
+    }
+
+    const projectDoc = await Project.findById(projectId)
+      .populate('client')
+      .populate('projectManager')
+      .populate('teamMembers');
+
+    if (!projectDoc) return res.status(404).json({ message: 'Project not found' });
+
+    const project = projectDoc.toObject();
+    const client = project.client || null;
+    const clientId = client?._id || project.client;
+
+    const billingsRaw = clientId
+      ? await Billing.find({ client: clientId }).populate('projects.project').sort({ createdAt: -1 })
+      : [];
+
+    const projectIdStr = projectId.toString();
+    const billingsForProject = billingsRaw.filter((b) => {
+      const arr = b.projects || [];
+      return arr.some((line) => {
+        const pid = (line.project?._id || line.project)?.toString?.() || String(line.project || '');
+        return pid === projectIdStr;
+      });
+    });
+
+    const billings = billingsForProject.map((b) => withDynamicRemainingCost(b));
+
+    const tracking = computeTracking(
+      billingsRaw.map((b) => (b.toObject ? b.toObject() : { ...b }))
+    );
+    const tr = tracking.find((t) => {
+      const pid = (t.project?._id || t.project)?.toString?.() || String(t.project || '');
+      return pid === projectIdStr;
+    });
+
+    const budget = Number(project.budget) || 0;
+    const paid = tr?.totalPaid ?? 0;
+    const costFromBilling = tr?.projectCost ?? 0;
+    const remaining = tr != null ? tr.remaining : Math.max(0, budget - paid);
+
+    const billingSummary = calculateBillingSummary(
+      billingsForProject.map((b) => (b.toObject ? b.toObject() : { ...b }))
+    );
+
+    const tasks = await Task.find({
+      project: projectId,
+      isRecurringTemplate: { $ne: true },
+    })
+      .populate('project', 'projectName')
+      .populate('assignedTo', 'name email')
+      .populate('assignedBy', 'name email')
+      .sort({ updatedAt: -1 })
+      .limit(100)
+      .lean();
+
+    const workHistory = [];
+    for (const b of billings) {
+      const amt = b.paymentDetails?.amount;
+      workHistory.push({
+        type: 'invoice',
+        at: b.createdAt,
+        label: `Invoice ${b.invoiceNumber || String(b._id).slice(-6)}`,
+        detail:
+          amt != null && amt !== ''
+            ? `Recorded payment: ₹${Number(amt).toLocaleString('en-IN')}`
+            : '—',
+        id: b._id,
+      });
+    }
+    workHistory.push({
+      type: 'project',
+      at: project.createdAt,
+      label: `Project created: ${project.projectName}`,
+      detail: project.status || '—',
+      id: project._id,
+    });
+    for (const t of tasks.slice(0, 50)) {
+      workHistory.push({
+        type: 'task',
+        at: t.updatedAt || t.createdAt,
+        label: t.title,
+        detail: `${t.status || '—'} · ${t.project?.projectName || 'Project'}`,
+        id: t._id,
+      });
+    }
+    workHistory.sort((a, b) => new Date(b.at) - new Date(a.at));
+
+    const financials = {
+      budget,
+      projectCostBilling: costFromBilling || budget,
+      paidFromBilling: paid,
+      remainingAmount: remaining,
+    };
+
+    res.status(200).json({
+      project,
+      client,
+      financials,
+      billingSummary,
+      billings,
+      tasks,
+      workHistory: workHistory.slice(0, 50),
+    });
+  } catch (error) {
+    console.error('getProjectDashboard failed:', error);
+    res.status(500).json({ message: 'Error loading project dashboard', error: error.message });
+  }
+};
+
 // Get a single project by ID
 export const getProjectById = async (req, res) => {
   try {
@@ -140,9 +287,11 @@ export const getProjectById = async (req, res) => {
 // Update a project by ID
 export const updateProject = async (req, res) => {
   try {
+    const payload = normalizeProjectPayload(req.body);
     const previous = await Project.findById(req.params.id).select('client');
-    const updated = await Project.findByIdAndUpdate(req.params.id, req.body, {
+    const updated = await Project.findByIdAndUpdate(req.params.id, payload, {
       new: true,
+      runValidators: true,
     })
       .populate('client')
       .populate('projectManager')
@@ -152,7 +301,9 @@ export const updateProject = async (req, res) => {
     if (updated?.client) await syncClientProfile({ clientId: updated.client, preferredProjectId: updated._id });
     res.status(200).json({ message: 'Project updated', project: updated });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating project', error });
+    console.error('updateProject failed:', error);
+    const status = ['ValidationError', 'CastError'].includes(error?.name) ? 400 : 500;
+    res.status(status).json({ message: getProjectErrorMessage(error, 'Error updating project') });
   }
 };
 

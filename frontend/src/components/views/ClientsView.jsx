@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import api from '../../api/axios'
-import { useNavigate } from 'react-router-dom'
-import { EditIcon, DeleteIcon } from '../Icons'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { EditIcon, DeleteIcon, DashboardIcon } from '../Icons'
 
 const ClientsView = () => {
+  const [searchParams] = useSearchParams()
+  const focusId = (searchParams.get('focus') || '').trim()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -66,37 +68,48 @@ const ClientsView = () => {
 
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
-      if (searchText) {
-        const q = searchText.toLowerCase()
-        const match =
-          (c.clientName || '').toLowerCase().includes(q) ||
-          (c.mailId || '').toLowerCase().includes(q) ||
-          (c.businessType || '').toLowerCase().includes(q) ||
-          (c.clientNumber || '').toLowerCase().includes(q)
-        if (!match) return false
-      }
+      const isFocused = focusId && String(c._id) === focusId
+      if (!isFocused) {
+        if (searchText) {
+          const q = searchText.toLowerCase()
+          const match =
+            (c.clientName || '').toLowerCase().includes(q) ||
+            (c.mailId || '').toLowerCase().includes(q) ||
+            (c.businessType || '').toLowerCase().includes(q) ||
+            (c.clientNumber || '').toLowerCase().includes(q)
+          if (!match) return false
+        }
 
-      if (dateFrom) {
-        const from = new Date(dateFrom)
-        from.setHours(0, 0, 0, 0)
-        if (!c.date || new Date(c.date) < from) return false
-      }
-      if (dateTo) {
-        const to = new Date(dateTo)
-        to.setHours(23, 59, 59, 999)
-        if (!c.date || new Date(c.date) > to) return false
-      }
+        if (dateFrom) {
+          const from = new Date(dateFrom)
+          from.setHours(0, 0, 0, 0)
+          if (!c.date || new Date(c.date) < from) return false
+        }
+        if (dateTo) {
+          const to = new Date(dateTo)
+          to.setHours(23, 59, 59, 999)
+          if (!c.date || new Date(c.date) > to) return false
+        }
 
-      if (filterOnboardBy && c.onboardBy?._id !== filterOnboardBy) return false
+        if (filterOnboardBy && String(c.onboardBy?._id || '') !== String(filterOnboardBy)) return false
 
-      if (filterStatus) {
-        const clientStatus = c.status || 'Active'
-        if (clientStatus !== filterStatus) return false
+        if (filterStatus) {
+          const clientStatus = c.status || 'Active'
+          if (clientStatus !== filterStatus) return false
+        }
       }
 
       return true
     })
-  }, [clients, searchText, dateFrom, dateTo, filterOnboardBy, filterStatus])
+  }, [clients, searchText, dateFrom, dateTo, filterOnboardBy, filterStatus, focusId])
+
+  useEffect(() => {
+    if (!focusId || loading) return
+    const t = window.setTimeout(() => {
+      document.getElementById(`client-focus-${focusId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [focusId, loading, filteredClients.length])
 
   const hasActiveFilters = searchText || dateFrom || dateTo || filterOnboardBy || filterStatus
 
@@ -205,18 +218,18 @@ const ClientsView = () => {
       ) : (
         <div className='bg-white rounded-lg shadow overflow-x-auto'>
           <table className='w-full table-auto text-sm'>
-            <thead>
-              <tr className='text-left border-b'>
-                <th className='px-4 py-3'>Client Name</th>
-                <th className='px-4 py-3'>Client Number</th>
-                <th className='px-4 py-3'>Mail ID</th>
-                <th className='px-4 py-3'>Business Type</th>
-                <th className='px-4 py-3'>Services</th>
-                <th className='px-4 py-3'>Date</th>
-                <th className='px-4 py-3'>Type</th>
-                <th className='px-4 py-3'>Status</th>
-                <th className='px-4 py-3'>Onboard By</th>
-                <th className='px-4 py-3'>Actions</th>
+            <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+              <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client Name</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client Number</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Mail ID</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Business Type</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Services</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Date</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Type</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Status</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Onboard By</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -228,7 +241,13 @@ const ClientsView = () => {
                 </tr>
               ) : (
                 filteredClients.map((c) => (
-                  <tr key={c._id} className='border-b hover:bg-gray-50'>
+                  <tr
+                    key={c._id}
+                    id={`client-focus-${c._id}`}
+                    className={`border-b hover:bg-gray-50 ${
+                      focusId && String(c._id) === focusId ? 'bg-amber-50 ring-2 ring-inset ring-blue-500' : ''
+                    }`}
+                  >
                     <td className='px-4 py-3 font-medium'>{c.clientName}</td>
                     <td className='px-4 py-3'>{c.clientNumber}</td>
                     <td className='px-4 py-3'>{c.mailId}</td>
@@ -244,6 +263,13 @@ const ClientsView = () => {
                     <td className='px-4 py-3'>{c.onboardBy?.name || '—'}</td>
                     <td className='px-4 py-3'>
                       <div className='flex items-center gap-2'>
+                        <button
+                          onClick={() => navigate(`/clients/${c._id}/dashboard`)}
+                          className='p-1.5 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors'
+                          title='Client dashboard'
+                        >
+                          <DashboardIcon />
+                        </button>
                         <button
                           onClick={() => navigate(`/clients/edit/${c._id}`)}
                           className='p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors'

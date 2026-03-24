@@ -1,19 +1,63 @@
 import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+
+const VALID_STATUSES = ['All', 'Pending', 'In Progress', 'Completed', 'Cancelled', 'Delayed']
+
+const localYmd = (d) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/**
+ * True if task dueDate falls on the same calendar day as filterYmd (YYYY-MM-DD from date input).
+ * Checks both UTC date (how date-only form values are stored) and local date (scheduled times).
+ */
+const matchesDueDateFilter = (dueDateVal, filterYmd) => {
+  if (!filterYmd) return true
+  if (dueDateVal == null || dueDateVal === '') return false
+  const d = new Date(dueDateVal)
+  if (Number.isNaN(d.getTime())) return false
+  const utcKey = d.toISOString().slice(0, 10)
+  const localKey = localYmd(d)
+  return utcKey === filterYmd || localKey === filterYmd
+}
 
 const TasksView = ({ isMyTasks = false }) => {
   const { user, canAssignTask } = useAuth()
+  const [searchParams] = useSearchParams()
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterProject, setFilterProject] = useState('')
-  const [filterStatus, setFilterStatus] = useState('All')
-  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [filterStatus, setFilterStatus] = useState(() => {
+    const s = searchParams.get('status')
+    return s && VALID_STATUSES.includes(s) ? s : 'All'
+  })
+  const [filterDate, setFilterDate] = useState(() =>
+    searchParams.has('date') ? searchParams.get('date') || '' : ''
+  )
   const [filterAssignee, setFilterAssignee] = useState('')
   const [projects, setProjects] = useState([])
   const [employees, setEmployees] = useState([])
   const navigate = useNavigate()
+
+  // Sync filters when URL search params change (e.g. dashboard links with ?date=&status=)
+  useEffect(() => {
+    if (searchParams.has('status')) {
+      const s = searchParams.get('status')
+      setFilterStatus(s && VALID_STATUSES.includes(s) ? s : 'All')
+    } else {
+      setFilterStatus('All')
+    }
+    if (searchParams.has('date')) {
+      setFilterDate(searchParams.get('date') || '')
+    } else {
+      setFilterDate('')
+    }
+  }, [searchParams])
 
   const fetchTasks = async () => {
     try {
@@ -66,17 +110,22 @@ const TasksView = ({ isMyTasks = false }) => {
     }
   }, [canAssignTask, isMyTasks])
 
+  const isDelayed = (t) => {
+    if (!t?.dueDate) return false
+    return new Date(t.dueDate) < new Date() && !['Completed', 'Cancelled'].includes(t.status)
+  }
+
   const filteredTasks = tasks.filter((t) => {
-    if (filterStatus !== 'All' && t.status !== filterStatus) return false
+    if (filterStatus === 'Delayed') {
+      if (!isDelayed(t)) return false
+    } else if (filterStatus !== 'All') {
+      if (t.status !== filterStatus) return false
+    }
     if ((isMyTasks || !canAssignTask()) && filterProject) {
       const projectId = t.project?._id || t.project
       if (projectId !== filterProject) return false
     }
-    if (filterDate) {
-      if (!t.dueDate) return false
-      const taskDate = new Date(t.dueDate).toISOString().slice(0, 10)
-      if (taskDate !== filterDate) return false
-    }
+    if (filterDate && !matchesDueDateFilter(t.dueDate, filterDate)) return false
     return true
   })
 
@@ -108,6 +157,14 @@ const TasksView = ({ isMyTasks = false }) => {
       case 'Medium': return 'bg-yellow-100 text-yellow-800'
       default: return 'bg-green-100 text-green-800'
     }
+  }
+
+  const fmtDateTime = (d) => {
+    if (!d) return '—'
+    const x = new Date(d)
+    return Number.isNaN(x.getTime())
+      ? '—'
+      : x.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   const getStatusColor = (status) => {
@@ -211,10 +268,10 @@ const TasksView = ({ isMyTasks = false }) => {
     <div className='p-8'>
       <div className='mb-8 flex justify-between items-center'>
         <div>
-          <h1 className='text-sm font-bold text-gray-900'>
+          <h1 className='text-3xl font-bold text-gray-900'>
             {isMyTasks ? 'My Tasks' : canAssignTask() ? 'Tasks' : 'My Tasks'}
           </h1>
-          <p className='text-sm text-gray-600 mt-2'>
+          <p className='text-base text-gray-600 mt-2'>
             {isMyTasks
               ? 'Tasks assigned to you by project managers and team leads.'
               : canAssignTask()
@@ -290,12 +347,12 @@ const TasksView = ({ isMyTasks = false }) => {
         </div>
         {canAssignTask() && !isMyTasks && (
           <div className='flex items-center gap-2'>
-            <label className='text-sm font-medium text-gray-700'>Assignee</label>
+            <label className='text-sm font-medium text-gray-700'>Assign to</label>
             <select
               value={filterAssignee}
               onChange={(e) => setFilterAssignee(e.target.value)}
               className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[160px]'>
-              <option value=''>All Assignees</option>
+              <option value=''>All</option>
               {employees.map((emp) => (
                 <option key={emp._id} value={emp._id}>{emp.name}</option>
               ))}
@@ -313,30 +370,34 @@ const TasksView = ({ isMyTasks = false }) => {
             <option value='In Progress'>In Progress</option>
             <option value='Completed'>Completed</option>
             <option value='Cancelled'>Cancelled</option>
+            <option value='Delayed'>Delayed</option>
           </select>
         </div>
       </div>
 
-      <div className='bg-white rounded-lg shadow-md overflow-hidden'>
-        <table className='w-full'>
-          <thead className='bg-gray-100 border-b border-gray-200'>
+      <div className='bg-white rounded-lg shadow-md overflow-x-auto'>
+        <table className='w-full min-w-[1100px]'>
+          <thead className='text-left border-b border-blue-700 bg-blue-600 text-white font-bold text-sm'>
             <tr>
-              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Task</th>
-              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Project</th>
-              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Assignee</th>
-              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Due Date</th>
-              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Priority</th>
-              <th className='text-left py-4 px-6 text-sm font-semibold text-gray-700'>Status</th>
+              <th className='text-left py-4 px-6 border-b border-blue-700/30'>Task</th>
+              <th className='text-left py-4 px-6 border-b border-blue-700/30'>Project</th>
+              <th className='text-left py-4 px-6 border-b border-blue-700/30'>Assign to</th>
+              <th className='text-left py-4 px-6 border-b border-blue-700/30'>Signed by</th>
+              <th className='text-left py-4 px-6 border-b border-blue-700/30'>Assigned (date & time)</th>
+              <th className='text-left py-4 px-6 border-b border-blue-700/30'>Updated (date & time)</th>
+              <th className='text-left py-4 px-6 border-b border-blue-700/30'>Due Date</th>
+              <th className='text-left py-4 px-6 border-b border-blue-700/30'>Priority</th>
+              <th className='text-left py-4 px-6 border-b border-blue-700/30'>Status</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className='py-12 text-center text-sm text-gray-500'>Loading...</td>
+                <td colSpan={9} className='py-12 text-center text-sm text-gray-500'>Loading...</td>
               </tr>
             ) : filteredTasks.length === 0 ? (
               <tr>
-                <td colSpan={6} className='py-12 text-center text-sm text-gray-500'>No tasks found</td>
+                <td colSpan={9} className='py-12 text-center text-sm text-gray-500'>No tasks found</td>
               </tr>
             ) : (
               filteredTasks.map((task) => (
@@ -366,6 +427,16 @@ const TasksView = ({ isMyTasks = false }) => {
                       <span className='text-sm text-gray-900'>{task.assignedTo?.name || '—'}</span>
                     </div>
                   </td>
+                  <td className='py-4 px-6'>
+                    <div className='flex items-center gap-2'>
+                      <div className='w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white text-xs font-bold'>
+                        {(task.assignedBy?.name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                      </div>
+                      <span className='text-sm text-gray-900'>{task.assignedBy?.name || '—'}</span>
+                    </div>
+                  </td>
+                  <td className='py-4 px-6 text-gray-700 text-sm whitespace-nowrap'>{fmtDateTime(task.createdAt)}</td>
+                  <td className='py-4 px-6 text-gray-700 text-sm whitespace-nowrap'>{fmtDateTime(task.updatedAt)}</td>
                   <td className='py-4 px-6 text-gray-700 text-sm'>
                     {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'}
                   </td>
@@ -500,11 +571,11 @@ const TasksView = ({ isMyTasks = false }) => {
                 </span>
               </div>
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
-                <span className='text-sm text-gray-500'>Assigned To</span>
+                <span className='text-sm text-gray-500'>Assign to</span>
                 <span className='text-sm font-medium text-gray-900'>{viewTask.assignedTo?.name || '—'}</span>
               </div>
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
-                <span className='text-sm text-gray-500'>Assigned By</span>
+                <span className='text-sm text-gray-500'>Signed by</span>
                 <span className='text-sm font-medium text-gray-900'>{viewTask.assignedBy?.name || '—'}</span>
               </div>
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
@@ -538,10 +609,16 @@ const TasksView = ({ isMyTasks = false }) => {
                   {viewTask.dueDate ? new Date(viewTask.dueDate).toLocaleDateString() : '—'}
                 </span>
               </div>
-              <div className='flex justify-between items-center py-2'>
-                <span className='text-sm text-gray-500'>Created</span>
+              <div className='flex justify-between items-center py-2 border-b border-gray-100'>
+                <span className='text-sm text-gray-500'>Assigned (date & time)</span>
                 <span className='text-sm text-gray-700'>
-                  {viewTask.createdAt ? new Date(viewTask.createdAt).toLocaleString() : '—'}
+                  {viewTask.createdAt ? fmtDateTime(viewTask.createdAt) : '—'}
+                </span>
+              </div>
+              <div className='flex justify-between items-center py-2'>
+                <span className='text-sm text-gray-500'>Updated (date & time)</span>
+                <span className='text-sm text-gray-700'>
+                  {viewTask.updatedAt ? fmtDateTime(viewTask.updatedAt) : '—'}
                 </span>
               </div>
             </div>

@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import api from '../api/axios'
 import { useNavigate, useParams } from 'react-router-dom'
+import SearchableSelect from '../components/SearchableSelect'
 
 const RATE_TYPES = ['', 'Per Hour', 'Per Day', 'Per Project', 'Fixed']
 const INDIVIDUAL_TYPES = ['', 'Influencer', 'Model', 'Video Editor', 'Cinematographer', 'Content Writer']
@@ -95,6 +96,22 @@ const AddCollaborator = () => {
     setForm((f) => ({ ...f, [name]: value }))
   }
 
+  const handleStateChange = (stateName) => {
+    const selected = states.find((s) => s.name === stateName)
+    setForm((f) => ({ ...f, state: stateName, city: '' }))
+    fetchCities(selected?.iso2 || '')
+  }
+
+  const stateOptions = useMemo(
+    () => states.map((s) => ({ value: s.name, label: s.name })),
+    [states],
+  )
+
+  const cityOptions = useMemo(
+    () => cities.map((c) => ({ value: c.name, label: c.name })),
+    [cities],
+  )
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.name?.trim()) {
@@ -133,9 +150,9 @@ const AddCollaborator = () => {
 
       <form onSubmit={handleSubmit} className='max-w-5xl w-full'>
         <div className='bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden'>
-          <div className='px-4 py-3 md:px-5 border-b border-gray-100 bg-gray-50/80'>
-            <h2 className='text-lg font-semibold text-gray-800'>Collaborator details</h2>
-            <p className='text-sm text-gray-500 mt-0.5'>Basic information and contact</p>
+          <div className='px-4 py-3 md:px-5 border-b border-blue-700 bg-blue-600'>
+            <h2 className='text-lg font-semibold text-white'>Collaborator details</h2>
+            <p className='text-sm text-white mt-0.5'>Basic information and contact</p>
           </div>
 
           <div className='p-4 space-y-4 md:p-5'>
@@ -166,38 +183,31 @@ const AddCollaborator = () => {
             {/* Row 2: 4 fields */}
             <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4'>
               <div>
-                <label className='block text-sm font-medium text-gray-700'>State</label>
-                <select
-                  name='state'
+                <SearchableSelect
+                  id='collab-state'
+                  label='State'
                   value={form.state}
-                  onChange={(e) => {
-                    const selectedName = e.target.value
-                    const selected = states.find((s) => s.name === selectedName)
-                    setForm((f) => ({ ...f, state: selectedName, city: '' }))
-                    fetchCities(selected?.iso2 || '')
-                  }}
-                  className={inputClass}
-                >
-                  <option value=''>Select state</option>
-                  {states.map((s) => (
-                    <option key={s.iso2 || s.name} value={s.name}>{s.name}</option>
-                  ))}
-                </select>
+                  onChange={handleStateChange}
+                  options={stateOptions}
+                  placeholder='Select state'
+                  searchPlaceholder='Search states…'
+                  emptyText='No states match'
+                  inputClassName={inputClass}
+                />
               </div>
               <div>
-                <label className='block text-sm font-medium text-gray-700'>City</label>
-                <select
-                  name='city'
+                <SearchableSelect
+                  id='collab-city'
+                  label='City'
                   value={form.city}
-                  onChange={handleChange}
-                  className={inputClass}
+                  onChange={(cityName) => setForm((f) => ({ ...f, city: cityName }))}
+                  options={cityOptions}
                   disabled={!form.state}
-                >
-                  <option value=''>{form.state ? 'Select city' : 'Select state first'}</option>
-                  {cities.map((c) => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
+                  placeholder={form.state ? 'Select city' : 'Select state first'}
+                  searchPlaceholder='Search cities…'
+                  emptyText='No cities match'
+                  inputClassName={inputClass}
+                />
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-700'>Pincode</label>

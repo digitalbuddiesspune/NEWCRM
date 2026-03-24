@@ -422,13 +422,13 @@ const AttendanceView = () => {
               </div>
               <div className='mt-3 overflow-x-auto'>
                 <table className='w-full table-auto text-sm'>
-                  <thead>
-                    <tr className='text-left border-b'>
-                      <th className='py-2 pr-4'>Employee</th>
-                      <th className='py-2 pr-4'>Full days</th>
-                      <th className='py-2 pr-4'>Half days</th>
-                      <th className='py-2 pr-4'>In progress</th>
-                      <th className='py-2 pr-4'>Total hours</th>
+                  <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                    <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                      <th className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Employee</th>
+                      <th className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Full days</th>
+                      <th className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Half days</th>
+                      <th className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>In progress</th>
+                      <th className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Total hours</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -524,16 +524,16 @@ const AttendanceView = () => {
               </div>
             </div>
             <table className='w-full table-auto text-sm'>
-              <thead>
-                <tr className='text-left border-b'>
-                  <th className='px-4 py-3'>Date</th>
-                  <th className='px-4 py-3'>Employee</th>
-                  <th className='px-4 py-3'>Check In</th>
-                  <th className='px-4 py-3'>Check Out</th>
-                  <th className='px-4 py-3'>Check-in location</th>
-                  <th className='px-4 py-3'>Check-out location</th>
-                  <th className='px-4 py-3'>Duration</th>
-                  <th className='px-4 py-3'>Status</th>
+              <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Date</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Employee</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Check In</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Check Out</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Check-in location</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Check-out location</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Duration</th>
+                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Status</th>
                 </tr>
               </thead>
               <tbody>

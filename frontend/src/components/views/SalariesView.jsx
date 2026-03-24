@@ -71,14 +71,14 @@ const SalariesView = () => {
       ) : (
         <div className='bg-white rounded-lg shadow overflow-x-auto'>
           <table className='w-full table-auto text-sm'>
-            <thead>
-              <tr className='text-left border-b'>
-                <th className='px-4 py-3'>Employee</th>
-                <th className='px-4 py-3'>Amount</th>
-                <th className='px-4 py-3'>Month</th>
-                <th className='px-4 py-3'>Year</th>
-                <th className='px-4 py-3'>Status</th>
-                <th className='px-4 py-3'>Actions</th>
+            <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+              <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Employee</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Amount</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Month</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Year</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Status</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>
               </tr>
             </thead>
             <tbody>

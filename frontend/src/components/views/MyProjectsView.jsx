@@ -99,24 +99,24 @@ const MyProjectsView = () => {
             <div className='grid grid-cols-1 md:grid-cols-4 gap-6 mb-8'>
               <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-orange-500'>
                 <p className='text-gray-600 text-sm font-medium'>Total Assigned</p>
-                <h3 className='text-2xl font-bold text-gray-900 mt-2'>{projects.length}</h3>
+                <h3 className='text-2xl font-bold text-gray-900 mt-2 text-sm'>{projects.length}</h3>
                 <p className='text-xs text-gray-600 mt-2'>{inProgress} in progress, {onHold} on hold</p>
               </div>
               <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-green-500'>
                 <p className='text-gray-600 text-sm font-medium'>Completed</p>
-                <h3 className='text-2xl font-bold text-gray-900 mt-2'>{completed}</h3>
+                <h3 className='text-2xl font-bold text-gray-900 mt-2 text-sm'>{completed}</h3>
                 <p className='text-xs text-green-600 mt-2'>
                   {projects.length ? Math.round((completed / projects.length) * 100) : 0}% completion rate
                 </p>
               </div>
               <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-blue-500'>
                 <p className='text-gray-600 text-sm font-medium'>In Progress</p>
-                <h3 className='text-2xl font-bold text-gray-900 mt-2'>{inProgress}</h3>
+                <h3 className='text-2xl font-bold text-gray-900 mt-2 text-sm'>{inProgress}</h3>
                 <p className='text-xs text-blue-600 mt-2'>Active projects</p>
               </div>
               <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-red-500'>
                 <p className='text-gray-600 text-sm font-medium'>On Hold</p>
-                <h3 className='text-2xl font-bold text-gray-900 mt-2'>{onHold}</h3>
+                <h3 className='text-2xl font-bold text-gray-900 mt-2 text-sm'>{onHold}</h3>
                 <p className='text-xs text-red-600 mt-2'>May need attention</p>
               </div>
             </div>
@@ -161,10 +161,10 @@ const MyProjectsView = () => {
                     Showing {startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, filteredProjects.length)} of {filteredProjects.length} project(s)
                   </p>
                   {paginatedProjects.map((project) => (
-                    <div key={project._id} className='bg-white rounded-lg shadow-md p-6'>
+                    <div key={project._id} className='bg-white rounded-lg shadow-md p-6 transition-shadow'>
                       <div className='flex justify-between items-start mb-4'>
                         <div className='flex-1'>
-                          <h3 className='text-base font-bold text-gray-900'>{project.projectName}</h3>
+                          <h3 className='text-base font-bold text-gray-900 text-sm'>{project.projectName}</h3>
                           <p className='text-sm text-gray-600'>
                             {project.client?.clientName || '—'} • {project.projectManager?.name ? `PM: ${project.projectManager.name}` : '—'}
                             • {project.department || 'IT'}

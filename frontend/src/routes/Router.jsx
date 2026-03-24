@@ -35,6 +35,8 @@ import InvoicePage from '../pages/InvoicePage'
 import CompaniesView from '../components/views/CompaniesView'
 import AddCompany from '../pages/AddCompany'
 import ClientProfilesView from '../components/views/ClientProfilesView'
+import ClientDashboardView from '../components/views/ClientDashboardView'
+import ProjectDashboardView from '../components/views/ProjectDashboardView'
 import AddClientProfile from '../pages/AddClientProfile'
 import SocialCalendarClientView from '../pages/SocialCalendarClientView'
 
@@ -51,6 +53,7 @@ const router = createBrowserRouter([
             { path: 'dashboard', element: <DashboardView /> },
             { path: 'admin-dashboard', element: <DashboardView /> },
             { path: 'clients', element: <ClientsView /> },
+            { path: 'clients/:clientId/dashboard', element: <ClientDashboardView /> },
             { path: 'client-profiles', element: <ClientProfilesView /> },
             { path: 'client-profiles/new', element: <AddClientProfile /> },
             { path: 'client-profiles/edit/:id', element: <AddClientProfile /> },
@@ -68,7 +71,9 @@ const router = createBrowserRouter([
             { path: 'leads/view/:id', element: <AddLead readOnly /> },
             { path: 'leads/edit/:id', element: <AddLead /> },
             { path: 'projects', element: <ProjectsView /> },
+            { path: 'projects/:projectId/dashboard', element: <ProjectDashboardView /> },
             { path: 'my-projects', element: <MyProjectsView /> },
+            { path: 'my-projects/:projectId/dashboard', element: <ProjectDashboardView /> },
             { path: 'add-project', element: <AddProject /> },
             { path: 'projects/edit/:id', element: <AddProject /> },
             { path: 'assign-task', element: <AssignTask /> },

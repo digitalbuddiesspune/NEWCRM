@@ -11,6 +11,21 @@ const STATUS_OPTIONS = [
   'Meeting Schedule',
 ]
 
+const normalizeFollowUpsFromApi = (arr) =>
+  (Array.isArray(arr) ? arr : []).map((fu) => ({
+    _id: fu._id,
+    date: fu.date ? new Date(fu.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    comments: fu.comments ?? fu.text ?? '',
+  }))
+
+const followUpDateToDisplay = (dateVal) => {
+  if (!dateVal) return '—'
+  const s = typeof dateVal === 'string' ? dateVal : ''
+  const d =
+    s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T12:00:00`) : new Date(dateVal)
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString()
+}
+
 const AddLead = ({ readOnly = false }) => {
   const { id } = useParams()
   const isEdit = Boolean(id)
@@ -39,7 +54,8 @@ const AddLead = ({ readOnly = false }) => {
   const [employeeOpen, setEmployeeOpen] = useState(false)
   const [meetingPersonSearch, setMeetingPersonSearch] = useState('')
   const [meetingPersonOpen, setMeetingPersonOpen] = useState(false)
-  const [followUpInput, setFollowUpInput] = useState('')
+  const [followUpDate, setFollowUpDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [followUpComments, setFollowUpComments] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [states, setStates] = useState([])
@@ -102,7 +118,7 @@ const AddLead = ({ readOnly = false }) => {
           meetingPersonName: l.meetingPersonName ?? '',
           meetingTime: l.meetingTime ? new Date(l.meetingTime).toISOString().slice(0, 16) : '',
           meetingInfoSent: l.meetingInfoSent ?? false,
-          followUps: Array.isArray(l.followUps) ? l.followUps : [],
+          followUps: normalizeFollowUpsFromApi(l.followUps),
           generatedBy: genId ?? '',
         })
         setEmployeeSearch(genName)
@@ -180,10 +196,14 @@ const AddLead = ({ readOnly = false }) => {
   }
 
   const handleAddFollowUp = () => {
-    const trimmed = followUpInput.trim()
-    if (!trimmed) return
-    setForm((f) => ({ ...f, followUps: [...f.followUps, { text: trimmed, date: new Date() }] }))
-    setFollowUpInput('')
+    const trimmed = followUpComments.trim()
+    if (!trimmed || !followUpDate) return
+    setForm((f) => ({
+      ...f,
+      followUps: [...f.followUps, { date: followUpDate, comments: trimmed }],
+    }))
+    setFollowUpComments('')
+    setFollowUpDate(new Date().toISOString().slice(0, 10))
   }
 
   const handleRemoveFollowUp = (idx) => {
@@ -203,6 +223,19 @@ const AddLead = ({ readOnly = false }) => {
       const payload = {
         ...form,
         meetingTime: form.meetingTime ? new Date(form.meetingTime) : undefined,
+        followUps: form.followUps.map((fu) => {
+          const piece = {
+            comments: (fu.comments ?? fu.text ?? '').trim(),
+            date:
+              typeof fu.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fu.date)
+                ? new Date(`${fu.date}T12:00:00`)
+                : fu.date
+                  ? new Date(fu.date)
+                  : new Date(),
+          }
+          if (fu._id) piece._id = fu._id
+          return piece
+        }),
       }
       if (isEdit) {
         await api.put(`/leads/${id}`, payload)
@@ -217,21 +250,21 @@ const AddLead = ({ readOnly = false }) => {
     }
   }
 
-  const inputClass = 'mt-1 block w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white'
+  const inputClass = 'mt-1.5 block w-full border border-gray-300 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white'
 
   return (
     <div className='p-4 md:p-6 flex flex-col items-center'>
       <h1 className='text-2xl font-bold text-gray-900 mb-4 text-center w-full'>{readOnly ? 'View Lead' : isEdit ? 'Edit Lead' : 'Add Lead'}</h1>
       <form onSubmit={handleSubmit} className='max-w-6xl w-full'>
         <div className='bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden'>
-          <div className='px-4 py-3 md:px-5 border-b border-gray-100 bg-gray-50/80'>
-            <h2 className='text-lg font-semibold text-gray-800'>Lead details</h2>
-            <p className='text-sm text-gray-500 mt-0.5'>Track lead source, status, meeting details and follow-ups.</p>
+          <div className='px-4 py-3 md:px-5 border-b border-blue-700 bg-blue-600'>
+            <h2 className='text-lg font-semibold text-white'>Lead details</h2>
+            <p className='text-sm text-blue-100 mt-0.5'>Track lead source, status, meeting details and follow-ups.</p>
           </div>
 
-          <div className='p-4 pt-6 md:p-5 md:pt-7 space-y-5'>
+          <div className='p-4 pt-6 md:p-5 md:pt-7 space-y-6 md:space-y-8'>
             <fieldset disabled={readOnly} className='contents'>
-              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4'>
+              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6 py-1 md:py-2'>
                 <div>
                   <label className='block text-sm font-medium text-gray-700'>Name</label>
                   <input name='name' value={form.name} onChange={handleChange} required className={inputClass} />
@@ -250,7 +283,7 @@ const AddLead = ({ readOnly = false }) => {
                 </div>
               </div>
 
-              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4'>
+              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6 py-1 md:py-2'>
                 <div>
                   <label className='block text-sm font-medium text-gray-700'>State</label>
                   <select
@@ -291,7 +324,7 @@ const AddLead = ({ readOnly = false }) => {
                 </div>
               </div>
 
-              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4'>
+              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6 py-1 md:py-2'>
                 <div>
                   <label className='block text-sm font-medium text-gray-700'>Lead Source</label>
                   <input name='leadSource' value={form.leadSource} onChange={handleChange} className={inputClass} placeholder='e.g. Website, Referral' />
@@ -335,13 +368,13 @@ const AddLead = ({ readOnly = false }) => {
                 </div>
               </div>
 
-              <div>
+              <div className='py-1 md:py-2'>
                 <label className='block text-sm font-medium text-gray-700'>Description</label>
                 <textarea name='description' value={form.description} onChange={handleChange} rows={3} className={inputClass} />
               </div>
 
               {form.status === 'Meeting Schedule' && (
-                <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4'>
+                <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6 py-1 md:py-2'>
                   <div>
                     <label className='block text-sm font-medium text-gray-700'>Meeting Type</label>
                     <select name='meetingType' value={form.meetingType} onChange={handleChange} className={inputClass}>
@@ -399,34 +432,97 @@ const AddLead = ({ readOnly = false }) => {
                 </div>
               )}
 
-              <div>
-                <label className='block text-sm font-medium text-gray-700 mb-2'>Follow Up</label>
-                {!readOnly && (
-                  <div className='flex gap-2'>
-                    <textarea
-                      value={followUpInput}
-                      onChange={(e) => setFollowUpInput(e.target.value)}
-                      placeholder='Add follow-up note...'
-                      rows={2}
-                      className={inputClass}
-                    />
-                    <button type='button' onClick={handleAddFollowUp} className='px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-medium hover:bg-gray-50 h-fit mt-1'>
-                      Add
-                    </button>
-                  </div>
-                )}
-                {form.followUps.length > 0 && (
-                  <ul className='mt-2 space-y-2'>
-                    {form.followUps.map((fu, idx) => (
-                      <li key={idx} className='flex items-start justify-between gap-2 p-2 bg-gray-50 rounded-lg text-sm'>
-                        <span>{fu.text}</span>
-                        {!readOnly && (
-                          <button type='button' onClick={() => handleRemoveFollowUp(idx)} className='text-red-600 hover:text-red-800 text-xs'>Remove</button>
+              <div className='py-1 md:py-2'>
+                <label className='block text-sm font-medium text-gray-700 mb-2'>Follow up</label>
+                <div className='border border-gray-200 rounded-xl overflow-hidden'>
+                  <div className='overflow-x-auto'>
+                    <table className='w-full text-sm min-w-[480px]'>
+                      <thead>
+                        <tr className='bg-blue-600 text-white'>
+                          <th className='text-left px-4 py-3 font-semibold whitespace-nowrap'>Follow-up date</th>
+                          <th className='text-left px-4 py-3 font-semibold'>Comments (what was discussed)</th>
+                          {!readOnly && (
+                            <th className='text-right px-4 py-3 font-semibold w-28 whitespace-nowrap'>Actions</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody className='bg-white divide-y divide-gray-100'>
+                        {form.followUps.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={readOnly ? 2 : 3}
+                              className='px-4 py-8 text-center text-gray-500'
+                            >
+                              {readOnly ? 'No follow-ups recorded.' : 'No follow-ups yet. Add one below.'}
+                            </td>
+                          </tr>
+                        ) : (
+                          form.followUps.map((fu, idx) => (
+                            <tr key={fu._id || `fu-${idx}`} className='hover:bg-gray-50/80'>
+                              <td className='px-4 py-3 text-gray-900 whitespace-nowrap align-top'>
+                                {followUpDateToDisplay(fu.date)}
+                              </td>
+                              <td className='px-4 py-3 text-gray-800 align-top whitespace-pre-wrap break-words'>
+                                {fu.comments ?? fu.text ?? '—'}
+                              </td>
+                              {!readOnly && (
+                                <td className='px-4 py-3 text-right align-top'>
+                                  <button
+                                    type='button'
+                                    onClick={() => handleRemoveFollowUp(idx)}
+                                    className='text-red-600 hover:text-red-800 text-xs font-medium'
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))
                         )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {!readOnly && (
+                    <div className='p-4 bg-gray-50 border-t border-gray-200 space-y-3'>
+                      <div className='grid grid-cols-1 sm:grid-cols-12 gap-3 items-end'>
+                        <div className='sm:col-span-3'>
+                          <label htmlFor='follow-up-date' className='block text-xs font-medium text-gray-600 mb-1'>
+                            Follow-up date
+                          </label>
+                          <input
+                            id='follow-up-date'
+                            type='date'
+                            value={followUpDate}
+                            onChange={(e) => setFollowUpDate(e.target.value)}
+                            className={inputClass}
+                          />
+                        </div>
+                        <div className='sm:col-span-7'>
+                          <label htmlFor='follow-up-comments' className='block text-xs font-medium text-gray-600 mb-1'>
+                            Comments (what was discussed)
+                          </label>
+                          <textarea
+                            id='follow-up-comments'
+                            value={followUpComments}
+                            onChange={(e) => setFollowUpComments(e.target.value)}
+                            placeholder='Summarize what was discussed on this follow-up…'
+                            rows={2}
+                            className={inputClass}
+                          />
+                        </div>
+                        <div className='sm:col-span-2 flex sm:justify-end'>
+                          <button
+                            type='button'
+                            onClick={handleAddFollowUp}
+                            className='w-full sm:w-auto px-4 py-3 rounded-xl border border-gray-300 bg-white text-sm font-medium hover:bg-gray-100'
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {error && <p className='text-red-600 text-sm rounded-lg bg-red-50 py-2 px-3'>{error}</p>}

@@ -1,8 +1,29 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 
 const LEAVE_TYPES = ['Sick', 'Casual', 'Annual', 'Unpaid', 'Other']
+
+/** Start-of-local-day timestamp for comparisons */
+const startOfDay = (d) => {
+  const x = new Date(d)
+  if (Number.isNaN(x.getTime())) return NaN
+  x.setHours(0, 0, 0, 0)
+  return x.getTime()
+}
+
+/** Leave overlaps calendar month YYYY-MM if any day falls in that month */
+const leaveOverlapsMonth = (leave, yyyymm) => {
+  if (!yyyymm || !/^\d{4}-\d{2}$/.test(yyyymm)) return true
+  const [y, m] = yyyymm.split('-').map(Number)
+  if (!y || !m || m < 1 || m > 12) return true
+  const monthStart = startOfDay(new Date(y, m - 1, 1))
+  const monthEnd = startOfDay(new Date(y, m, 0))
+  const leaveStart = startOfDay(leave.startDate)
+  const leaveEnd = startOfDay(leave.endDate)
+  if (Number.isNaN(leaveStart) || Number.isNaN(leaveEnd)) return false
+  return leaveEnd >= monthStart && leaveStart <= monthEnd
+}
 
 const LeaveView = () => {
   const { user, canApproveLeave } = useAuth()
@@ -11,6 +32,9 @@ const LeaveView = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterEmployeeId, setFilterEmployeeId] = useState('')
+  const [filterMonth, setFilterMonth] = useState('')
+  const [employees, setEmployees] = useState([])
   const [showApplyForm, setShowApplyForm] = useState(false)
   const [applyForm, setApplyForm] = useState({ leaveType: 'Casual', startDate: '', endDate: '', reason: '' })
   const [submitting, setSubmitting] = useState(false)
@@ -36,6 +60,19 @@ const LeaveView = () => {
   useEffect(() => {
     fetchLeaves()
   }, [isApprover, user?._id, filterStatus])
+
+  useEffect(() => {
+    const loadEmployees = async () => {
+      try {
+        const res = await api.get('/employees')
+        const list = Array.isArray(res.data) ? res.data : res.data?.data || []
+        setEmployees(Array.isArray(list) ? list : [])
+      } catch {
+        setEmployees([])
+      }
+    }
+    loadEmployees()
+  }, [])
 
   const handleApplySubmit = async (e) => {
     e.preventDefault()
@@ -96,7 +133,34 @@ const LeaveView = () => {
     }
   }
 
-  const displayLeaves = isApprover ? leaves : leaves
+  const employeeOptions = useMemo(() => {
+    const byId = new Map()
+    for (const e of employees) {
+      const id = String(e._id)
+      byId.set(id, { _id: e._id, name: e.name || '—' })
+    }
+    for (const leave of leaves) {
+      const emp = leave.employee
+      if (!emp) continue
+      const id = String(emp._id || emp)
+      if (!byId.has(id)) byId.set(id, { _id: emp._id || emp, name: emp.name || '—' })
+    }
+    return Array.from(byId.values()).sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+    )
+  }, [employees, leaves])
+
+  const filteredLeaves = useMemo(() => {
+    return leaves.filter((leave) => {
+      if (filterEmployeeId) {
+        const empId = leave.employee?._id || leave.employee
+        const empIdStr = empId?.toString?.() || String(empId || '')
+        if (empIdStr !== filterEmployeeId) return false
+      }
+      if (!leaveOverlapsMonth(leave, filterMonth)) return false
+      return true
+    })
+  }, [leaves, filterEmployeeId, filterMonth])
 
   const getStatusBadge = (status) => {
     const classes = {
@@ -120,22 +184,70 @@ const LeaveView = () => {
             {isApprover ? 'View and approve leave applications.' : 'Apply for leave and view your applications.'}
           </p>
         </div>
-        <div className='flex flex-wrap items-center gap-3'>
-          {isApprover && (
+        <div className='flex flex-wrap items-end gap-3'>
+          <div className='flex flex-col gap-1'>
+            <label htmlFor='leave-filter-month' className='text-xs font-medium text-gray-600'>
+              Month
+            </label>
+            <input
+              id='leave-filter-month'
+              type='month'
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(e.target.value)}
+              className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[10rem]'
+            />
+          </div>
+          <div className='flex flex-col gap-1 min-w-[12rem] flex-1 max-w-sm'>
+            <label htmlFor='leave-filter-employee' className='text-xs font-medium text-gray-600'>
+              Employee
+            </label>
             <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+              id='leave-filter-employee'
+              value={filterEmployeeId}
+              onChange={(e) => setFilterEmployeeId(e.target.value)}
+              className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full min-w-[12rem]'
             >
-              <option value=''>All statuses</option>
-              <option value='Pending'>Pending</option>
-              <option value='Approved'>Approved</option>
-              <option value='Rejected'>Rejected</option>
+              <option value=''>All employees</option>
+              {employeeOptions.map((emp) => (
+                <option key={String(emp._id)} value={String(emp._id)}>
+                  {emp.name}
+                </option>
+              ))}
             </select>
+          </div>
+          {(filterMonth || filterEmployeeId) && (
+            <button
+              type='button'
+              onClick={() => {
+                setFilterMonth('')
+                setFilterEmployeeId('')
+              }}
+              className='border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50'
+            >
+              Clear filters
+            </button>
+          )}
+          {isApprover && (
+            <div className='flex flex-col gap-1'>
+              <label htmlFor='leave-filter-status' className='text-xs font-medium text-gray-600'>
+                Status
+              </label>
+              <select
+                id='leave-filter-status'
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[9rem]'
+              >
+                <option value=''>All statuses</option>
+                <option value='Pending'>Pending</option>
+                <option value='Approved'>Approved</option>
+                <option value='Rejected'>Rejected</option>
+              </select>
+            </div>
           )}
           <button
             onClick={() => setShowApplyForm(true)}
-            className='bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700'
+            className='bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 self-end'
           >
             Apply for Leave
           </button>
@@ -301,28 +413,30 @@ const LeaveView = () => {
             </h2>
           </div>
           <table className='w-full table-auto text-sm'>
-            <thead>
-              <tr className='text-left border-b bg-gray-50'>
-                {isApprover && <th className='px-4 py-3 font-semibold text-gray-700'>Employee</th>}
-                <th className='px-4 py-3 font-semibold text-gray-700'>Type</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Start Date</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>End Date</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Days</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Reason</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Status</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>View</th>
-                {isApprover && <th className='px-4 py-3 font-semibold text-gray-700'>Actions</th>}
+            <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+              <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                {isApprover && <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Employee</th>}
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Type</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Start Date</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>End Date</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Days</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Reason</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Status</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>View</th>
+                {isApprover && <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {displayLeaves.length === 0 ? (
+              {filteredLeaves.length === 0 ? (
                 <tr>
                   <td colSpan={isApprover ? 9 : 7} className='px-4 py-10 text-center text-gray-500'>
-                    No leave applications found.
+                    {leaves.length === 0
+                      ? 'No leave applications found.'
+                      : 'No applications match your filters.'}
                   </td>
                 </tr>
               ) : (
-                displayLeaves.map((leave) => (
+                filteredLeaves.map((leave) => (
                   <tr key={leave._id} className='border-b hover:bg-gray-50'>
                     {isApprover && (
                       <td className='px-4 py-3 font-medium'>{leave.employee?.name || '—'}</td>

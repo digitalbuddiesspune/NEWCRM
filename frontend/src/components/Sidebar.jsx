@@ -54,7 +54,6 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
       items: [
         { id: 'admin-dashboard', label: 'Admin Dashboard', icon: <DashboardIcon />, path: '/admin-dashboard' },
         { id: 'clients', label: 'Clients', icon: <BookIcon />, path: '/clients' },
-        { id: 'client-profiles', label: 'Client Profiles', icon: <BookIcon />, path: '/client-profiles' },
         { id: 'company', label: 'Company', icon: <SettingsIcon />, path: '/companies' },
         { id: 'collaborators', label: 'Collaborators', icon: <UsersIcon />, path: '/collaborators' },
       ],

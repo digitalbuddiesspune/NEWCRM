@@ -25,7 +25,10 @@ const isAddProjectPath = (pathname) => {
 }
 
 const isProjectsOnlyPath = (pathname) => {
-  return pathname === '/projects' || pathname.startsWith('/projects/edit/')
+  if (pathname === '/projects') return true
+  if (/^\/projects\/[^/]+\/dashboard$/.test(pathname)) return true
+  if (pathname.startsWith('/projects/edit/')) return true
+  return false
 }
 
 const isAssignTaskPath = (pathname) => pathname === '/assign-task'

@@ -1,8 +1,10 @@
 import mongoose from 'mongoose';
 
 const followUpSchema = new mongoose.Schema({
-  text: { type: String, required: true },
   date: { type: Date, default: Date.now },
+  comments: { type: String, default: '' },
+  /** @deprecated prefer comments — kept for older records */
+  text: { type: String },
 });
 
 const leadSchema = new mongoose.Schema({

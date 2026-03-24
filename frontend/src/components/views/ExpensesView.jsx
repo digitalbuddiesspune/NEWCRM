@@ -71,13 +71,13 @@ const ExpensesView = () => {
       ) : (
         <div className='bg-white rounded-xl shadow border border-gray-200 overflow-hidden'>
           <table className='w-full table-auto text-sm'>
-            <thead>
-              <tr className='text-left border-b bg-gray-50'>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Date</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Description</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Category</th>
-                <th className='px-4 py-3 text-right font-semibold text-gray-700'>Amount</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Actions</th>
+            <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+              <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Date</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Description</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Category</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Amount</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>
               </tr>
             </thead>
             <tbody>

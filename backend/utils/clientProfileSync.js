@@ -6,7 +6,7 @@ import SocialMediaCalendar from '../models/socialMediaCalendar.js';
 
 const dayNow = () => new Date();
 
-const calculateBillingSummary = (billings) => {
+export const calculateBillingSummary = (billings) => {
   const byProject = new Map();
   let totalAmountPaid = 0;
 

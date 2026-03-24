@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { EditIcon, DeleteIcon } from '../Icons'
 
 const EmployeesView = () => {
+  const [searchParams] = useSearchParams()
+  const focusId = (searchParams.get('focus') || '').trim()
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -34,6 +36,14 @@ const EmployeesView = () => {
     fetchEmployees()
   }, [])
 
+  useEffect(() => {
+    if (!focusId || loading) return
+    const t = window.setTimeout(() => {
+      document.getElementById(`employee-focus-${focusId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [focusId, loading, employees.length])
+
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this employee?')) return
     try {
@@ -54,7 +64,7 @@ const EmployeesView = () => {
         <div>
           <button
             onClick={() => navigate('/add-employee')}
-            className='bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm'
+            className='bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-bold'
           >
             Add Employee
           </button>
@@ -68,21 +78,27 @@ const EmployeesView = () => {
       ) : (
         <div className='bg-white rounded-lg shadow overflow-x-auto'>
           <table className='w-full table-auto text-sm'>
-            <thead>
-              <tr className='text-left border-b'>
-                <th className='px-4 py-3'>Name</th>
-                <th className='px-4 py-3'>Email</th>
-                <th className='px-4 py-3'>Designation</th>
-                <th className='px-4 py-3'>Department</th>
-                <th className='px-4 py-3'>Date Joined</th>
-                <th className='px-4 py-3'>Salary</th>
-                <th className='px-4 py-3'>Status</th>
-                <th className='px-4 py-3'>Actions</th>
+            <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+              <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Name</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Email</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Designation</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Department</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Date Joined</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Salary</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Status</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>
               </tr>
             </thead>
             <tbody>
               {employees.map((e) => (
-                <tr key={e._id} className='border-b hover:bg-gray-50'>
+                <tr
+                  key={e._id}
+                  id={`employee-focus-${e._id}`}
+                  className={`border-b hover:bg-gray-50 ${
+                    focusId && String(e._id) === focusId ? 'bg-amber-50 ring-2 ring-inset ring-blue-500' : ''
+                  }`}
+                >
                   <td className='px-4 py-3 font-medium'>{e.name}</td>
                   <td className='px-4 py-3'>{e.email}</td>
                   <td className='px-4 py-3'>{e.designation?.title || '—'}</td>

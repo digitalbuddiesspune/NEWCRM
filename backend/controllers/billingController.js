@@ -9,7 +9,7 @@ function getFinancialYearEnd(date = new Date()) {
 }
 
 /** Distribute payment amount across projects (first first), return projects with dynamic remainingCost */
-function withDynamicRemainingCost(billing) {
+export function withDynamicRemainingCost(billing) {
   const doc = billing.toObject ? billing.toObject() : { ...billing };
   const paymentAmount = Number(doc.paymentDetails?.amount) || 0;
   const projects = Array.isArray(doc.projects) ? doc.projects : [];
@@ -32,7 +32,7 @@ function withDynamicRemainingCost(billing) {
 }
 
 /** For a list of billings, compute per-project: total project cost (max), total paid (sum of distributed amount), remaining */
-function computeTracking(billings) {
+export function computeTracking(billings) {
   const byProject = new Map();
   for (const b of billings) {
     const doc = b.toObject ? b.toObject() : b;

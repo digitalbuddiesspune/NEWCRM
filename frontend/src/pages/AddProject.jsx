@@ -150,10 +150,15 @@ const AddProject = () => {
     setLoading(true)
     setError(null)
     try {
+      const toNullableDate = (value) => (value ? value : null)
       const payload = {
         ...form,
-        budget: form.budget ? Number(form.budget) : undefined,
-        progress: form.progress ? Number(form.progress) : 0,
+        budget: form.budget === '' ? undefined : Number(form.budget),
+        progress: form.progress === '' ? 0 : Number(form.progress),
+        projectManager: form.projectManager || null,
+        teamMembers: Array.isArray(form.teamMembers) ? form.teamMembers.filter(Boolean) : [],
+        endDate: toNullableDate(form.endDate),
+        deadline: toNullableDate(form.deadline),
       }
       if (isEdit) {
         await api.put(`/projects/${id}`, payload)
@@ -176,9 +181,9 @@ const AddProject = () => {
 
       <form onSubmit={handleSubmit} className='max-w-5xl w-full'>
         <div className='bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden'>
-          <div className='px-4 py-3 md:px-5 md:py-4 border-b border-gray-100 bg-gray-50/80'>
-            <h2 className='text-lg font-semibold text-gray-800'>Project details</h2>
-            <p className='text-sm text-gray-500 mt-0.5'>Basic information and timeline</p>
+          <div className='px-4 py-3 md:px-5 md:py-4 border-b border-blue-700 bg-blue-600'>
+            <h2 className='text-lg font-semibold text-white'>Project details</h2>
+            <p className='text-sm text-white mt-0.5'>Basic information and timeline</p>
           </div>
 
           <div className='p-4 space-y-5 md:p-5'>

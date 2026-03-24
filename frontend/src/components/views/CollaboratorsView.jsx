@@ -109,17 +109,17 @@ const CollaboratorsView = () => {
       ) : (
         <div className='bg-white rounded-lg shadow overflow-x-auto border border-gray-100'>
           <table className='w-full table-auto text-sm'>
-            <thead>
-              <tr className='text-left border-b bg-gray-50'>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Name</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Contact No.</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Email</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>City</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>State</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Rate</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Individual Type</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Links</th>
-                <th className='px-4 py-3 font-semibold text-gray-700'>Actions</th>
+            <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+              <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Name</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Contact No.</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Email</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>City</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>State</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Rate</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Individual Type</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Links</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>
               </tr>
             </thead>
             <tbody>

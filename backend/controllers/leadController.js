@@ -84,13 +84,37 @@ export const getLeadById = async (req, res) => {
 
 export const updateLead = async (req, res) => {
   try {
-    const updated = await Lead.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-    }).populate('generatedBy');
-    if (!updated) return res.status(404).json({ message: 'Lead not found' });
-    res.status(200).json({ message: 'Lead updated', lead: updated });
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    const payload = { ...req.body };
+    delete payload._id;
+    delete payload.__v;
+    delete payload.createdAt;
+    delete payload.updatedAt;
+
+    const { followUps, ...rest } = payload;
+    Object.assign(lead, rest);
+
+    if (Array.isArray(followUps)) {
+      lead.followUps = followUps.map((fu) => {
+        const row = {
+          comments: String(fu.comments ?? fu.text ?? '').trim(),
+          date: fu.date ? new Date(fu.date) : new Date(),
+        };
+        if (fu._id != null && String(fu._id).length > 0) {
+          row._id = fu._id;
+        }
+        return row;
+      });
+      lead.markModified('followUps');
+    }
+
+    await lead.save();
+    const populated = await Lead.findById(lead._id).populate('generatedBy');
+    res.status(200).json({ message: 'Lead updated', lead: populated });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating lead', error });
+    res.status(500).json({ message: 'Error updating lead', error: error.message || error });
   }
 };
 
@@ -106,10 +130,17 @@ export const deleteLead = async (req, res) => {
 
 export const addFollowUp = async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, comments, date } = req.body;
+    const body = String(comments ?? text ?? '').trim();
+    if (!body) {
+      return res.status(400).json({ message: 'Comments are required' });
+    }
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
-    lead.followUps.push({ text, date: new Date() });
+    lead.followUps.push({
+      comments: body,
+      date: date ? new Date(date) : new Date(),
+    });
     await lead.save();
     const populated = await Lead.findById(lead._id).populate('generatedBy');
     res.status(200).json({ message: 'Follow-up added', lead: populated });

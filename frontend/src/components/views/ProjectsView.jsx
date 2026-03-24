@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import api from '../../api/axios'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { EditIcon, DeleteIcon } from '../Icons'
+import { ProjectDetailModal } from '../ProjectDetailModal'
 
 const ITEMS_PER_PAGE = 10
 const STATUS_OPTIONS = ['All', 'Not Started', 'In Progress', 'On Hold', 'Completed', 'Cancelled']
@@ -11,6 +12,8 @@ const DEPARTMENT_OPTIONS = ['All', 'IT', 'Marketing']
 
 const ProjectsView = () => {
   const { canAddProject, canAssignTask } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const focusId = (searchParams.get('focus') || '').trim()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -19,7 +22,20 @@ const ProjectsView = () => {
   const [filterDepartment, setFilterDepartment] = useState('All')
   const [filterSearch, setFilterSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [detailProject, setDetailProject] = useState(null)
   const navigate = useNavigate()
+  const detailParam = (searchParams.get('detail') || '').trim()
+
+  const replaceSearchWithoutDetail = () => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('detail')
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   const fetchProjects = async () => {
     try {
@@ -72,19 +88,24 @@ const ProjectsView = () => {
   const completed = projects.filter((p) => p.status === 'Completed').length
   const onHold = projects.filter((p) => p.status === 'On Hold').length
 
-  const filteredProjects = projects.filter((p) => {
-    if (filterStatus !== 'All' && p.status !== filterStatus) return false
-    if (filterPriority !== 'All' && p.priority !== filterPriority) return false
-    if (filterDepartment !== 'All' && (p.department || 'IT') !== filterDepartment) return false
-    if (filterSearch.trim()) {
-      const search = filterSearch.toLowerCase().trim()
-      const name = (p.projectName || '').toLowerCase()
-      const clientName = (p.client?.clientName || '').toLowerCase()
-      const pmName = (p.projectManager?.name || '').toLowerCase()
-      if (!name.includes(search) && !clientName.includes(search) && !pmName.includes(search)) return false
-    }
-    return true
-  })
+  const filteredProjects = useMemo(() => {
+    return projects.filter((p) => {
+      const isFocused = focusId && String(p._id) === focusId
+      if (!isFocused) {
+        if (filterStatus !== 'All' && p.status !== filterStatus) return false
+        if (filterPriority !== 'All' && p.priority !== filterPriority) return false
+        if (filterDepartment !== 'All' && (p.department || 'IT') !== filterDepartment) return false
+        if (filterSearch.trim()) {
+          const search = filterSearch.toLowerCase().trim()
+          const name = (p.projectName || '').toLowerCase()
+          const clientName = (p.client?.clientName || '').toLowerCase()
+          const pmName = (p.projectManager?.name || '').toLowerCase()
+          if (!name.includes(search) && !clientName.includes(search) && !pmName.includes(search)) return false
+        }
+      }
+      return true
+    })
+  }, [projects, focusId, filterStatus, filterPriority, filterDepartment, filterSearch])
 
   const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE) || 1
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
@@ -98,12 +119,52 @@ const ProjectsView = () => {
     setCurrentPage(1)
   }, [filterStatus, filterPriority, filterDepartment, filterSearch])
 
+  useEffect(() => {
+    if (!focusId || loading) return
+    const idx = filteredProjects.findIndex((p) => String(p._id) === focusId)
+    if (idx < 0) return
+    const page = Math.floor(idx / ITEMS_PER_PAGE) + 1
+    setCurrentPage((prev) => (prev === page ? prev : page))
+  }, [focusId, loading, filteredProjects])
+
+  useEffect(() => {
+    if (!focusId || loading) return
+    const t = window.setTimeout(() => {
+      document.getElementById(`project-focus-${focusId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [focusId, loading, currentPage, filteredProjects.length])
+
+  useEffect(() => {
+    if (!detailParam || loading) return
+    const match = projects.find((p) => String(p._id) === detailParam)
+    if (match) {
+      setDetailProject(match)
+      replaceSearchWithoutDetail()
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await api.get(`/projects/${detailParam}`)
+        if (!cancelled && res.data) setDetailProject(res.data)
+      } catch (err) {
+        if (!cancelled) setError(err.response?.data?.message || err.message || 'Could not load project')
+      } finally {
+        if (!cancelled) replaceSearchWithoutDetail()
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [detailParam, loading, projects, navigate])
+
   return (
     <div className='p-8 flex flex-col items-center justify-center'>
       <div className='w-full max-w-6xl'>
         <div className='mb-8 flex justify-between items-center'>
           <div>
-            <h1 className='text-2xl font-bold text-gray-900 text-base'>Projects</h1>
+            <h1 className='text-2xl font-bold text-gray-900'>Projects</h1>
             <p className='text-gray-600 mt-1 text-sm'>Track project progress and deliverables.</p>
           </div>
           {canAddProject() && (
@@ -217,16 +278,50 @@ const ProjectsView = () => {
                     Showing {startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, filteredProjects.length)} of {filteredProjects.length} project(s)
                   </p>
                   {paginatedProjects.map((project) => (
-                  <div key={project._id} className='bg-white rounded-lg shadow-md p-6'>
-                    <div className='flex justify-between items-start mb-4'>
-                      <div className='flex-1'>
+                  <div
+                    key={project._id}
+                    id={`project-focus-${project._id}`}
+                    role='button'
+                    tabIndex={0}
+                    aria-label={`Open details for ${project.projectName || 'project'}`}
+                    onClick={() => setDetailProject(project)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setDetailProject(project)
+                      }
+                    }}
+                    className={`bg-white rounded-lg shadow-md p-6 transition-shadow cursor-pointer hover:shadow-lg ${
+                      focusId && String(project._id) === focusId
+                        ? 'ring-2 ring-orange-500 ring-offset-2 shadow-lg'
+                        : ''
+                    }`}
+                  >
+                    <div className='flex justify-between items-start gap-3 mb-4 flex-wrap'>
+                      <div className='flex-1 min-w-0'>
                         <h3 className='text-base font-bold text-gray-900 text-sm'>{project.projectName}</h3>
                         <p className='text-sm text-gray-600'>
                           {project.client?.clientName || '—'} • {project.projectManager?.name ? `PM: ${project.projectManager.name}` : '—'}
                            • {project.department || 'IT'}
                         </p>
                       </div>
-                      <div className='flex items-center gap-2'>
+                      <div className='flex flex-wrap items-center gap-2 justify-end' onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type='button'
+                          onClick={() => navigate(`/projects/${project._id}/dashboard`)}
+                          className='shrink-0 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors'
+                        >
+                          Dashboard
+                        </button>
+                        {canAssignTask() && (
+                          <button
+                            type='button'
+                            onClick={() => navigate(`/assign-task?projectId=${project._id}`)}
+                            className='shrink-0 px-3 py-1.5 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-semibold transition-colors'
+                          >
+                            + Assign Task
+                          </button>
+                        )}
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(project.status)}`}>
                           {project.status}
                         </span>
@@ -237,6 +332,7 @@ const ProjectsView = () => {
                           {canAddProject() && (
                             <>
                               <button
+                                type='button'
                                 onClick={() => navigate(`/projects/edit/${project._id}`)}
                                 className='p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors'
                                 title='Edit'
@@ -244,6 +340,7 @@ const ProjectsView = () => {
                                 <EditIcon />
                               </button>
                               <button
+                                type='button'
                                 onClick={() => handleDelete(project._id)}
                                 className='p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors'
                                 title='Delete'
@@ -297,16 +394,6 @@ const ProjectsView = () => {
                         />
                       </div>
                     </div>
-                    {canAssignTask() && (
-                      <div className='mt-4 pt-4 border-t border-gray-100'>
-                        <button
-                          onClick={() => navigate(`/assign-task?projectId=${project._id}`)}
-                          className='w-full py-2 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-sm font-medium transition-colors'
-                        >
-                          + Assign Task
-                        </button>
-                      </div>
-                    )}
                   </div>
                   ))}
 
@@ -349,6 +436,8 @@ const ProjectsView = () => {
           </>
         )}
       </div>
+
+      <ProjectDetailModal project={detailProject} onClose={() => setDetailProject(null)} />
     </div>
   )
 }
