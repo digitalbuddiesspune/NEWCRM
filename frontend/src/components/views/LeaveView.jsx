@@ -238,7 +238,7 @@ const LeaveView = () => {
                 onChange={(e) => setFilterStatus(e.target.value)}
                 className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[9rem]'
               >
-                <option value=''>All statuses</option>
+                <option value=''>All status</option>
                 <option value='Pending'>Pending</option>
                 <option value='Approved'>Approved</option>
                 <option value='Rejected'>Rejected</option>
@@ -411,6 +411,7 @@ const LeaveView = () => {
             <h2 className='text-lg font-semibold text-gray-800'>
               {isApprover ? 'All Leave Applications' : 'My Leave Applications'}
             </h2>
+            <p className='text-xs text-gray-500 mt-1'>Click a row to open full details.</p>
           </div>
           <table className='w-full table-auto text-sm'>
             <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
@@ -422,14 +423,13 @@ const LeaveView = () => {
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Days</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Reason</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Status</th>
-                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>View</th>
                 {isApprover && <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filteredLeaves.length === 0 ? (
                 <tr>
-                  <td colSpan={isApprover ? 9 : 7} className='px-4 py-10 text-center text-gray-500'>
+                  <td colSpan={isApprover ? 8 : 6} className='px-4 py-10 text-center text-gray-500'>
                     {leaves.length === 0
                       ? 'No leave applications found.'
                       : 'No applications match your filters.'}
@@ -437,7 +437,19 @@ const LeaveView = () => {
                 </tr>
               ) : (
                 filteredLeaves.map((leave) => (
-                  <tr key={leave._id} className='border-b hover:bg-gray-50'>
+                  <tr
+                    key={leave._id}
+                    className='border-b hover:bg-gray-50 cursor-pointer transition-colors'
+                    onClick={() => setViewLeave(leave)}
+                    role='button'
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setViewLeave(leave)
+                      }
+                    }}
+                  >
                     {isApprover && (
                       <td className='px-4 py-3 font-medium'>{leave.employee?.name || '—'}</td>
                     )}
@@ -445,36 +457,16 @@ const LeaveView = () => {
                     <td className='px-4 py-3'>{leave.startDate ? new Date(leave.startDate).toLocaleDateString() : '—'}</td>
                     <td className='px-4 py-3'>{leave.endDate ? new Date(leave.endDate).toLocaleDateString() : '—'}</td>
                     <td className='px-4 py-3'>{leave.numberOfDays ?? '—'}</td>
-                    <td
-                      className='px-4 py-3 max-w-[180px] truncate cursor-pointer hover:bg-blue-50 hover:text-blue-700 rounded transition-colors'
-                      title='Click to view full details in popup'
-                      onClick={() => setViewLeave(leave)}
-                      role='button'
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setViewLeave(leave) } }}
-                    >
+                    <td className='px-4 py-3 max-w-[180px] truncate text-gray-700' title={leave.reason || undefined}>
                       {leave.reason || '—'}
                     </td>
                     <td className='px-4 py-3'>{getStatusBadge(leave.status)}</td>
-                    <td className='px-4 py-3'>
-                      <button
-                        type='button'
-                        onClick={() => setViewLeave(leave)}
-                        className='inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 text-sm font-medium transition-colors'
-                        title='View full details in popup'
-                      >
-                        <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' aria-hidden='true'>
-                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 12a3 3 0 11-6 0 3 3 0 016 0z' />
-                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z' />
-                        </svg>
-                        View
-                      </button>
-                    </td>
                     {isApprover && (
-                      <td className='px-4 py-3'>
+                      <td className='px-4 py-3 cursor-default' onClick={(e) => e.stopPropagation()}>
                         {leave.status === 'Pending' ? (
                           <div className='flex flex-wrap items-center gap-2'>
                             <button
+                              type='button'
                               onClick={() => handleApprove(leave._id)}
                               className='px-2 py-1 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700'
                             >
@@ -490,12 +482,14 @@ const LeaveView = () => {
                                   className='border border-gray-300 rounded px-2 py-1 text-xs w-36'
                                 />
                                 <button
+                                  type='button'
                                   onClick={() => handleReject(leave._id)}
                                   className='px-2 py-1 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700'
                                 >
                                   Confirm Reject
                                 </button>
                                 <button
+                                  type='button'
                                   onClick={() => { setRejectingId(null); setRejectReason('') }}
                                   className='text-xs text-gray-500 hover:text-gray-700'
                                 >
@@ -504,6 +498,7 @@ const LeaveView = () => {
                               </>
                             ) : (
                               <button
+                                type='button'
                                 onClick={() => handleReject(leave._id)}
                                 className='px-2 py-1 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700'
                               >

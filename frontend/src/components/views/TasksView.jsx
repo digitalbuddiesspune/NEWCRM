@@ -184,7 +184,7 @@ const TasksView = ({ isMyTasks = false }) => {
   const taskStatusToSocialStatus = (status) => {
     if (status === 'Completed') return 'Published'
     if (status === 'Cancelled') return 'Cancelled'
-    return 'Scheduled' // Pending, In Progress
+    return 'Scheduled'
   }
 
   const canUpdateTaskStatus = (task) => {
@@ -262,6 +262,18 @@ const TasksView = ({ isMyTasks = false }) => {
     } finally {
       setUploadingPostLink(false)
     }
+  }
+
+  const openTaskFullPage = (task) => {
+    const base = isMyTasks ? '/my-tasks' : '/tasks'
+    navigate(`${base}/${encodeURIComponent(String(task._id))}`, { state: { task } })
+    setViewTask(null)
+    setSocialUpload({ platform: '', url: '' })
+  }
+
+  const closeTaskModal = () => {
+    setViewTask(null)
+    setSocialUpload({ platform: '', url: '' })
   }
 
   return (
@@ -365,7 +377,7 @@ const TasksView = ({ isMyTasks = false }) => {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'>
-            <option value='All'>All</option>
+            <option value='All'>All status</option>
             <option value='Pending'>Pending</option>
             <option value='In Progress'>In Progress</option>
             <option value='Completed'>Completed</option>
@@ -457,14 +469,10 @@ const TasksView = ({ isMyTasks = false }) => {
         </table>
       </div>
 
-      {/* View Task Popup */}
       {viewTask && (
         <div
           className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'
-          onClick={() => {
-            setViewTask(null)
-            setSocialUpload({ platform: '', url: '' })
-          }}
+          onClick={closeTaskModal}
         >
           <div
             className='bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto'
@@ -473,10 +481,8 @@ const TasksView = ({ isMyTasks = false }) => {
             <div className='flex justify-between items-start mb-4'>
               <h3 className='text-sm font-bold text-gray-900'>{viewTask.title}</h3>
               <button
-                onClick={() => {
-                  setViewTask(null)
-                  setSocialUpload({ platform: '', url: '' })
-                }}
+                type='button'
+                onClick={closeTaskModal}
                 className='p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600'
               >
                 <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
@@ -623,13 +629,18 @@ const TasksView = ({ isMyTasks = false }) => {
               </div>
             </div>
 
-            <div className='mt-6 pt-4 border-t border-gray-200'>
+            <div className='mt-6 pt-4 border-t border-gray-200 flex flex-col sm:flex-row gap-2'>
               <button
-                onClick={() => {
-                  setViewTask(null)
-                  setSocialUpload({ platform: '', url: '' })
-                }}
-                className='w-full py-2 px-4 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50'
+                type='button'
+                onClick={() => openTaskFullPage(viewTask)}
+                className='flex-1 py-2 px-4 rounded-lg text-sm font-medium border border-indigo-600 text-indigo-700 hover:bg-indigo-50'
+              >
+                Open full page
+              </button>
+              <button
+                type='button'
+                onClick={closeTaskModal}
+                className='flex-1 py-2 px-4 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50'
               >
                 Close
               </button>

@@ -10,6 +10,42 @@ const formatTime = (ms) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
+/** Elapsed from check-in to check-out, or from check-in to now (live) when still open */
+const durationMsFromRow = (row, nowMs = Date.now()) => {
+  if (!row?.checkIn) return null
+  const start = new Date(row.checkIn).getTime()
+  if (Number.isNaN(start)) return null
+  const end = row.checkOut ? new Date(row.checkOut).getTime() : nowMs
+  if (row.checkOut && Number.isNaN(end)) return null
+  return Math.max(0, end - start)
+}
+
+const hoursFromAttendanceRow = (row, nowMs = Date.now()) => {
+  const ms = durationMsFromRow(row, nowMs)
+  return ms == null ? 0 : ms / (1000 * 60 * 60)
+}
+
+function DurationCell({ row }) {
+  const [now, setNow] = useState(() => Date.now())
+  const isOpen = Boolean(row?.checkIn && !row.checkOut)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [isOpen])
+
+  if (!row?.checkIn) return <span>—</span>
+
+  const ms = durationMsFromRow(row, now)
+  if (ms == null) return <span>—</span>
+  return (
+    <span className='font-mono tabular-nums' title={row.checkOut ? 'Time from check-in to check-out' : 'Live time since check-in'}>
+      {formatTime(ms)}
+    </span>
+  )
+}
+
 const AttendanceView = () => {
   const { user, hasFullAccess } = useAuth()
   const isHR = hasFullAccess()
@@ -135,11 +171,12 @@ const AttendanceView = () => {
   }, [user?._id])
 
   useEffect(() => {
-    if (checkInTime) {
-      timerRef.current = setInterval(() => {
-        setElapsedMs((prev) => prev + 1000)
-      }, 1000)
+    if (!checkInTime) return
+    const tick = () => {
+      setElapsedMs(Math.max(0, Date.now() - checkInTime.getTime()))
     }
+    tick()
+    timerRef.current = setInterval(tick, 1000)
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
@@ -257,7 +294,7 @@ const AttendanceView = () => {
       const res = await api.post('/attendance/check-in', payload)
       const checkIn = new Date(res.data.attendance?.checkIn || Date.now())
       setCheckInTime(checkIn)
-      setElapsedMs(0)
+      setElapsedMs(Math.max(0, Date.now() - checkIn.getTime()))
       await syncActiveSessionFromServer()
       fetchAttendanceByMonth()
     } catch (err) {
@@ -319,21 +356,25 @@ const AttendanceView = () => {
         const fullDays = rows.filter((r) => r.status === 'Full Day').length
         const halfDays = rows.filter((r) => r.status === 'Half Day').length
         const inProgress = rows.filter((r) => r.status === 'In Progress').length
-        const totalHours = rows.reduce((s, r) => s + (typeof r.durationHours === 'number' ? r.durationHours : 0), 0)
+        const totalHours = rows.reduce((s, r) => s + hoursFromAttendanceRow(r), 0)
         return { emp, fullDays, halfDays, inProgress, totalHours }
       })
     : []
 
   const getStatusBadge = (status) => {
+    const label = status != null && String(status).trim() !== '' ? String(status).trim() : '—'
     const classes = {
-      'Full Day': 'bg-green-100 text-green-800',
-      'Half Day': 'bg-amber-100 text-amber-800',
-      'In Progress': 'bg-blue-100 text-blue-800',
-      Absent: 'bg-gray-100 text-gray-800',
+      'Full Day': 'bg-green-100 text-green-800 border border-green-200',
+      'Half Day': 'bg-amber-100 text-amber-800 border border-amber-200',
+      'In Progress': 'bg-blue-100 text-blue-800 border border-blue-200',
+      Absent: 'bg-gray-100 text-gray-800 border border-gray-200',
     }
+    const pillClass = classes[label] || 'bg-slate-100 text-slate-800 border border-slate-200'
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${classes[status] || ''}`}>
-        {status}
+      <span
+        className={`inline-flex items-center justify-center min-w-[5.5rem] px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${pillClass}`}
+      >
+        {label}
       </span>
     )
   }
@@ -524,16 +565,16 @@ const AttendanceView = () => {
               </div>
             </div>
             <table className='w-full table-auto text-sm'>
-              <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
-                <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
-                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Date</th>
-                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Employee</th>
-                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Check In</th>
-                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Check Out</th>
-                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Check-in location</th>
-                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Check-out location</th>
-                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Duration</th>
-                  <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Status</th>
+              <thead className='bg-blue-600 text-white'>
+                <tr className='text-sm font-bold'>
+                  <th className='px-4 py-3 text-left border-b border-blue-500/30'>Date</th>
+                  <th className='px-4 py-3 text-left border-b border-blue-500/30'>Employee</th>
+                  <th className='px-4 py-3 text-left border-b border-blue-500/30'>Check In</th>
+                  <th className='px-4 py-3 text-left border-b border-blue-500/30'>Check Out</th>
+                  <th className='px-4 py-3 text-left border-b border-blue-500/30'>Check-in location</th>
+                  <th className='px-4 py-3 text-left border-b border-blue-500/30'>Check-out location</th>
+                  <th className='px-4 py-3 text-left border-b border-blue-500/30'>Duration</th>
+                  <th className='px-4 py-3 text-center border-b border-blue-500/30'>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -581,13 +622,9 @@ const AttendanceView = () => {
                         )}
                       </td>
                       <td className='px-4 py-3'>
-                        {a.durationHours != null
-                          ? `${a.durationHours.toFixed(2)} hrs`
-                          : a.checkIn
-                          ? 'In progress'
-                          : '—'}
+                        <DurationCell row={a} />
                       </td>
-                      <td className='px-4 py-3'>{getStatusBadge(a.status)}</td>
+                      <td className='px-4 py-3 align-middle text-center'>{getStatusBadge(a.status)}</td>
                     </tr>
                   ))
                 )}

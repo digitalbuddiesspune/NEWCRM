@@ -5,7 +5,7 @@ const baseInputClass =
 
 /**
  * Combobox: type to filter options; click to select.
- * Pass `options` as [{ value, label }]; include { value: '', label: '…' } for an empty choice.
+ * Pass `options` as [{ value, label }]; empty selection uses `value` not present in options (placeholder shows when closed).
  */
 export default function SearchableSelect({
   id,

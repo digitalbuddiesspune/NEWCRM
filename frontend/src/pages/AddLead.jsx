@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useMemo, useState, useRef } from 'react'
 import api from '../api/axios'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import SearchableSelect from '../components/SearchableSelect'
 
 const STATUS_OPTIONS = [
   'Call not Received',
@@ -178,6 +179,13 @@ const AddLead = ({ readOnly = false }) => {
     (e.name || '').toLowerCase().includes(meetingPersonSearch.toLowerCase())
   )
 
+  const stateOptions = useMemo(
+    () => states.map((s) => ({ value: s.name, label: s.name })),
+    [states]
+  )
+
+  const cityOptions = useMemo(() => cities.map((c) => ({ value: c.name, label: c.name })), [cities])
+
   const handleEmployeeSelect = (emp) => {
     setForm((f) => ({ ...f, generatedBy: emp._id }))
     setEmployeeSearch(emp.name || '')
@@ -285,38 +293,36 @@ const AddLead = ({ readOnly = false }) => {
 
               <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6 py-1 md:py-2'>
                 <div>
-                  <label className='block text-sm font-medium text-gray-700'>State</label>
-                  <select
-                    name='state'
+                  <SearchableSelect
+                    id='lead-state'
+                    label='State'
                     value={form.state}
-                    onChange={(e) => {
-                      const selectedName = e.target.value
-                      const selected = states.find((s) => s.name === selectedName)
-                      setForm((f) => ({ ...f, state: selectedName, city: '' }))
+                    onChange={(stateName) => {
+                      const selected = states.find((s) => s.name === stateName)
+                      setForm((f) => ({ ...f, state: stateName || '', city: '' }))
                       fetchCitiesByStateCode(selected?.iso2 || '')
                     }}
-                    className={inputClass}
-                  >
-                    <option value=''>Select state</option>
-                    {states.map((s) => (
-                      <option key={s.iso2 || s.name} value={s.name}>{s.name}</option>
-                    ))}
-                  </select>
+                    options={stateOptions}
+                    disabled={readOnly}
+                    placeholder='Select state'
+                    searchPlaceholder='Search state…'
+                    emptyText='No states match'
+                    inputClassName={inputClass}
+                  />
                 </div>
                 <div>
-                  <label className='block text-sm font-medium text-gray-700'>City</label>
-                  <select
-                    name='city'
+                  <SearchableSelect
+                    id='lead-city'
+                    label='City'
                     value={form.city}
-                    onChange={handleChange}
-                    className={inputClass}
-                    disabled={!form.state}
-                  >
-                    <option value=''>{form.state ? 'Select city' : 'Select state first'}</option>
-                    {cities.map((c) => (
-                      <option key={c.name} value={c.name}>{c.name}</option>
-                    ))}
-                  </select>
+                    onChange={(cityName) => setForm((f) => ({ ...f, city: cityName || '' }))}
+                    options={cityOptions}
+                    disabled={readOnly || !form.state}
+                    placeholder={form.state ? 'Select city' : 'Select state first'}
+                    searchPlaceholder='Search city…'
+                    emptyText='No cities match'
+                    inputClassName={inputClass}
+                  />
                 </div>
                 <div className='lg:col-span-2'>
                   <label className='block text-sm font-medium text-gray-700'>Address</label>

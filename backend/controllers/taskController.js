@@ -155,7 +155,6 @@ export const getTasks = async (req, res) => {
       const socialTasks = [];
       for (const cal of calendars) {
         for (const post of cal.posts) {
-          if ((post.clientReviewStatus || 'Pending') !== 'Accepted') continue;
           const assignees = post.assignedTo || [];
           if (!assignees.length) continue;
           for (const emp of assignees) {

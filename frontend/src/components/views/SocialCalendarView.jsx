@@ -12,6 +12,26 @@ const CLIENT_REVIEW_BADGE = {
   'Need Changes': 'bg-purple-100 text-purple-800',
 }
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** Small accent dot per platform for post chips */
+const PLATFORM_ACCENT = {
+  All: 'from-slate-400 to-slate-500',
+  Instagram: 'from-fuchsia-500 to-pink-500',
+  Facebook: 'from-blue-600 to-blue-700',
+  Twitter: 'from-sky-400 to-sky-600',
+  LinkedIn: 'from-blue-700 to-indigo-700',
+  YouTube: 'from-red-500 to-red-600',
+  Other: 'from-violet-500 to-purple-600',
+}
+
+/** Normalize employee id for compares and API (avoid ObjectId vs string mismatches). */
+const assigneeIdKey = (raw) => {
+  if (raw == null || raw === '') return ''
+  const v = typeof raw === 'object' && raw._id != null ? raw._id : raw
+  return String(v)
+}
+
 const SocialCalendarView = () => {
   const { canManageSocialCalendar } = useAuth()
   const [clients, setClients] = useState([])
@@ -104,12 +124,13 @@ const SocialCalendarView = () => {
   }
 
   const toggleAssignedEmployee = (empId) => {
-    setPostForm((f) => ({
-      ...f,
-      assignedTo: f.assignedTo.includes(empId)
-        ? f.assignedTo.filter((id) => id !== empId)
-        : [...f.assignedTo, empId],
-    }))
+    const key = assigneeIdKey(empId)
+    if (!key) return
+    setPostForm((f) => {
+      const keys = (f.assignedTo || []).map(assigneeIdKey).filter(Boolean)
+      const next = keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key]
+      return { ...f, assignedTo: next }
+    })
   }
 
   const filteredClients = clients.filter((c) =>
@@ -177,8 +198,10 @@ const SocialCalendarView = () => {
       referenceLink: post.referenceLink || '',
       referenceUpload: post.referenceUpload || { fileName: '', mimeType: '', dataUrl: '' },
       assignedTo: Array.isArray(post.assignedTo)
-        ? post.assignedTo.map((a) => (typeof a === 'object' ? a._id : a)).filter(Boolean)
-        : post.assignedTo ? [post.assignedTo._id || post.assignedTo] : [],
+        ? post.assignedTo.map((a) => assigneeIdKey(typeof a === 'object' ? a._id ?? a : a)).filter(Boolean)
+        : post.assignedTo
+          ? [assigneeIdKey(typeof post.assignedTo === 'object' ? post.assignedTo._id ?? post.assignedTo : post.assignedTo)].filter(Boolean)
+          : [],
     })
   }
 
@@ -343,6 +366,17 @@ const SocialCalendarView = () => {
     })
   }
 
+  const isToday = (day) => {
+    const t = new Date()
+    return (
+      t.getDate() === day && t.getMonth() === calendarMonth && t.getFullYear() === calendarYear
+    )
+  }
+
+  const weekdayIndexForDay = (day) => new Date(calendarYear, calendarMonth, day).getDay()
+
+  const platformAccentGradient = (platform) => PLATFORM_ACCENT[platform] || PLATFORM_ACCENT.Other
+
   const openNewPostForDate = (day) => {
     if (!canManageSocialCalendar() || !selectedClient) return
     const date = new Date(calendarYear, calendarMonth, day, 9, 0)
@@ -390,14 +424,18 @@ const SocialCalendarView = () => {
   }
 
   return (
-    <div className='p-8'>
-      <div className='mb-6'>
-        <h1 className='text-2xl font-bold text-gray-900'>Social Media Calendar</h1>
-        <p className='text-gray-600 mt-1 text-sm'>Plan and schedule social media posts for your clients.</p>
+    <div className='min-h-[calc(100dvh-3rem)] bg-gradient-to-b from-slate-50 via-white to-cyan-50/15 p-6 sm:p-8'>
+      <div className='mb-8'>
+        <h1 className='bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-800 bg-clip-text text-2xl font-bold tracking-tight text-transparent sm:text-3xl'>
+          Social Media Calendar
+        </h1>
+        <p className='mt-1.5 max-w-xl text-sm text-slate-600'>
+          Plan and schedule social posts for each client with a clear month view and quick access to what&apos;s next.
+        </p>
       </div>
 
       {/* Client Selector */}
-      <div className='bg-white rounded-lg shadow p-4 mb-6'>
+      <div className='mb-6 rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm sm:p-5'>
         <label className='block text-sm font-semibold text-gray-700 mb-2'>Select Client</label>
         <div className='relative max-w-md' ref={clientRef}>
           <input
@@ -435,198 +473,324 @@ const SocialCalendarView = () => {
       </div>
 
       {!selectedClient ? (
-        <div className='bg-white rounded-lg shadow p-12 text-center'>
-          <p className='text-gray-500'>Select a client above to view or create their social media calendar.</p>
+        <div className='rounded-2xl border border-dashed border-slate-300/80 bg-white/60 py-16 text-center shadow-sm'>
+          <p className='text-sm font-medium text-slate-600'>Select a client to open their calendar</p>
+          <p className='mx-auto mt-2 max-w-sm text-xs text-slate-400'>Search above to schedule posts, export, and manage reviews.</p>
         </div>
       ) : loading ? (
-        <p className='text-sm'>Loading calendar...</p>
+        <div className='flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-white py-24 shadow-[0_8px_30px_rgb(0,0,0,0.06)]'>
+          <div
+            className='h-11 w-11 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent'
+            aria-hidden
+          />
+          <p className='mt-4 text-sm font-medium text-slate-600'>Loading calendar…</p>
+        </div>
       ) : error ? (
         <p className='text-red-600 text-sm'>{error}</p>
       ) : (
-        <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+        <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8'>
           {/* Calendar Grid */}
-          <div className='lg:col-span-2 bg-white rounded-lg shadow p-6'>
-            <div className='flex flex-wrap justify-between items-center gap-4 mb-6'>
-              <div className='flex items-center gap-3'>
-                <h2 className='text-xl font-bold text-gray-900'>{selectedClient.clientName}</h2>
-                <div className='flex items-center gap-1 border border-gray-300 rounded-lg overflow-hidden'>
-                  <button
-                    type='button'
-                    onClick={goPrevMonth}
-                    className='p-2 hover:bg-gray-100 text-gray-700'
-                    title='Previous month'
-                  >
-                    <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 19l-7-7 7-7' /></svg>
-                  </button>
-                  <div className='flex items-center gap-2 px-3 py-1.5 min-w-[180px] justify-center'>
-                    <select
-                      value={calendarMonth}
-                      onChange={(e) => setCalendarMonth(Number(e.target.value))}
-                      className='border-0 bg-transparent text-sm font-semibold text-gray-900 focus:ring-0 focus:outline-none cursor-pointer'
-                    >
-                      {[...Array(12)].map((_, i) => (
-                        <option key={i} value={i}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={calendarYear}
-                      onChange={(e) => setCalendarYear(Number(e.target.value))}
-                      className='border-0 bg-transparent text-sm font-semibold text-gray-900 focus:ring-0 focus:outline-none cursor-pointer'
-                    >
-                      {[...Array(11)].map((_, i) => {
-                        const y = calendarYear - 5 + i
-                        return <option key={y} value={y}>{y}</option>
-                      })}
-                    </select>
+          <div className='lg:col-span-2 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.06)]'>
+            <div className='h-1.5 bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500' aria-hidden />
+            <div className='p-5 sm:p-6'>
+              <div className='flex flex-wrap items-start justify-between gap-4 mb-6'>
+                <div className='space-y-3'>
+                  <div>
+                    <p className='text-[11px] font-semibold uppercase tracking-widest text-cyan-600/90'>Schedule</p>
+                    <h2 className='text-xl sm:text-2xl font-bold tracking-tight text-slate-900'>{selectedClient.clientName}</h2>
+                    <p className='text-sm text-slate-500 mt-0.5'>
+                      {new Date(calendarYear, calendarMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}
+                    </p>
                   </div>
+                  <div className='inline-flex items-center rounded-full border border-slate-200/90 bg-slate-50/80 p-1 shadow-sm backdrop-blur-sm'>
+                    <button
+                      type='button'
+                      onClick={goPrevMonth}
+                      className='rounded-full p-2 text-slate-600 transition hover:bg-white hover:text-slate-900 hover:shadow-sm'
+                      title='Previous month'
+                    >
+                      <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 19l-7-7 7-7' />
+                      </svg>
+                    </button>
+                    <div className='flex items-center gap-1.5 px-2'>
+                      <select
+                        value={calendarMonth}
+                        onChange={(e) => setCalendarMonth(Number(e.target.value))}
+                        className='max-w-[9.5rem] cursor-pointer rounded-lg border-0 bg-transparent py-1.5 text-sm font-semibold text-slate-800 focus:ring-0 focus:outline-none'
+                      >
+                        {[...Array(12)].map((_, i) => (
+                          <option key={i} value={i}>
+                            {new Date(2000, i).toLocaleString('default', { month: 'long' })}
+                          </option>
+                        ))}
+                      </select>
+                      <span className='text-slate-300'>·</span>
+                      <select
+                        value={calendarYear}
+                        onChange={(e) => setCalendarYear(Number(e.target.value))}
+                        className='w-[4.25rem] cursor-pointer rounded-lg border-0 bg-transparent py-1.5 text-sm font-semibold text-slate-800 focus:ring-0 focus:outline-none'
+                      >
+                        {[...Array(11)].map((_, i) => {
+                          const y = calendarYear - 5 + i
+                          return (
+                            <option key={y} value={y}>
+                              {y}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </div>
+                    <button
+                      type='button'
+                      onClick={goNextMonth}
+                      className='rounded-full p-2 text-slate-600 transition hover:bg-white hover:text-slate-900 hover:shadow-sm'
+                      title='Next month'
+                    >
+                      <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div className='flex flex-wrap gap-2'>
                   <button
                     type='button'
-                    onClick={goNextMonth}
-                    className='p-2 hover:bg-gray-100 text-gray-700'
-                    title='Next month'
+                    onClick={handleDownloadXLS}
+                    disabled={!calendar?.posts?.length}
+                    className='inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45'
+                    title='Download as Excel'
                   >
-                    <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' /></svg>
+                    <svg className='h-4 w-4 text-slate-500' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' />
+                    </svg>
+                    Export XLS
                   </button>
+                  {canManageSocialCalendar() && (
+                    <button
+                      type='button'
+                      onClick={() => setShowAddPost(true)}
+                      className='inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-cyan-500/25 transition hover:from-cyan-500 hover:to-teal-500'
+                    >
+                      <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 4v16m8-8H4' />
+                      </svg>
+                      New post
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className='flex gap-2'>
-                <button
-                  onClick={handleDownloadXLS}
-                  disabled={!calendar?.posts?.length}
-                  className='px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2'
-                  title='Download as Excel'
-                >
-                  <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' />
-                  </svg>
-                  Download XLS
-                </button>
-                {canManageSocialCalendar() && (
-                  <button
-                    onClick={() => setShowAddPost(true)}
-                    className='bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg text-sm font-medium'
-                  >
-                    + New Post
-                  </button>
-                )}
-              </div>
-            </div>
 
-            <div className='grid grid-cols-7 gap-2 mb-4'>
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                <div key={day} className='text-center font-bold text-gray-600 py-2 text-sm'>
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            <div className='grid grid-cols-7 gap-2'>
-              {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
-                <div key={`empty-${idx}`} className='aspect-square' />
-              ))}
-              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-                const dayPosts = getPostsForDay(day)
-                const isEmpty = dayPosts.length === 0
-                const isClickable = isEmpty && canManageSocialCalendar()
-                return (
+              <div className='grid grid-cols-7 gap-1.5 sm:gap-2 mb-2'>
+                {WEEKDAYS.map((day, idx) => (
                   <div
                     key={day}
-                    role={isClickable ? 'button' : undefined}
-                    tabIndex={isClickable ? 0 : undefined}
-                    onClick={() => isClickable && handleDayClick(day)}
-                    onKeyDown={(e) => isClickable && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleDayClick(day))}
-                    className={`aspect-square border rounded-lg p-2 flex flex-col border-gray-200 min-h-[80px] ${
-                      isClickable
-                        ? 'hover:border-cyan-400 hover:bg-cyan-50/50 cursor-pointer transition-colors'
-                        : 'hover:border-cyan-300'
+                    className={`rounded-lg py-2.5 text-center text-[11px] font-bold uppercase tracking-wider ${
+                      idx === 0 || idx === 6 ? 'bg-violet-50/80 text-violet-600/90' : 'bg-slate-100/90 text-slate-500'
                     }`}
                   >
-                    <span className='font-bold text-gray-900 text-sm'>{day}</span>
-                    {dayPosts.length > 0 && (
-                      <div className='mt-1 space-y-1 flex-1 overflow-y-auto overflow-x-hidden min-h-0'>
-                        {dayPosts.map((p) => (
-                          <div key={p._id} className='flex items-center gap-1'>
-                            {canManageSocialCalendar() ? (
-                              <button
-                                type='button'
-                                onClick={() => handleEditPost(p)}
-                                className='flex-1 min-w-0 text-left text-xs px-2 py-1 rounded truncate bg-cyan-100 text-cyan-800 hover:bg-cyan-200 cursor-pointer'
-                              >
-                                {p.title}
-                                <span className={`ml-1 inline-flex px-1.5 py-0.5 rounded text-[9px] ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}>
-                                  {p.clientReviewStatus || 'Pending'}
-                                </span>
-                                {getAssignedNames(p.assignedTo) && <span className='block text-[10px] text-cyan-600 truncate'>→ {getAssignedNames(p.assignedTo)}</span>}
-                              </button>
-                            ) : (
-                              <span className='flex-1 min-w-0 text-xs px-2 py-1 rounded truncate bg-cyan-100 text-cyan-800'>
-                                {p.title}
-                                <span className={`ml-1 inline-flex px-1.5 py-0.5 rounded text-[9px] ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}>
-                                  {p.clientReviewStatus || 'Pending'}
-                                </span>
-                                {getAssignedNames(p.assignedTo) && <span className='block text-[10px] text-cyan-600 truncate'>→ {getAssignedNames(p.assignedTo)}</span>}
-                              </span>
-                            )}
-                            {p.referenceLink && (
-                              <a
-                                href={p.referenceLink}
-                                target='_blank'
-                                rel='noopener noreferrer'
-                                onClick={(e) => e.stopPropagation()}
-                                className='flex-shrink-0 p-1 rounded text-cyan-600 hover:bg-cyan-200'
-                                title='Open reference link'
-                              >
-                                <svg className='w-3.5 h-3.5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' />
-                                </svg>
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {day}
                   </div>
-                )
-              })}
+                ))}
+              </div>
+
+              <div className='grid grid-cols-7 gap-1.5 sm:gap-2'>
+                {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
+                  <div key={`empty-${idx}`} className='min-h-[72px] sm:min-h-[96px]' />
+                ))}
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                  const dayPosts = getPostsForDay(day)
+                  const isEmpty = dayPosts.length === 0
+                  const isClickable = isEmpty && canManageSocialCalendar()
+                  const today = isToday(day)
+                  const wd = weekdayIndexForDay(day)
+                  const weekend = wd === 0 || wd === 6
+                  return (
+                    <div
+                      key={day}
+                      role={isClickable ? 'button' : undefined}
+                      tabIndex={isClickable ? 0 : undefined}
+                      onClick={() => isClickable && handleDayClick(day)}
+                      onKeyDown={(e) =>
+                        isClickable && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleDayClick(day))
+                      }
+                      className={`group relative flex min-h-[72px] sm:min-h-[96px] flex-col rounded-xl border p-2 transition-all duration-200 sm:p-2.5 ${
+                        today
+                          ? 'border-cyan-400/90 bg-gradient-to-b from-cyan-50/90 to-white shadow-[0_0_0_3px_rgba(34,211,238,0.22)]'
+                          : weekend
+                            ? 'border-slate-200/60 bg-gradient-to-b from-violet-50/30 to-slate-50/40'
+                            : 'border-slate-200/60 bg-gradient-to-b from-white to-slate-50/60'
+                      } ${
+                        isClickable
+                          ? 'cursor-pointer hover:z-[1] hover:border-cyan-400/70 hover:shadow-lg hover:shadow-cyan-500/10'
+                          : dayPosts.length > 0
+                            ? 'shadow-sm'
+                            : ''
+                      } `}
+                    >
+                      <div className='mb-1 flex items-center justify-between gap-1'>
+                        <span
+                          className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold tabular-nums sm:text-sm ${
+                            today
+                              ? 'bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-sm'
+                              : weekend
+                                ? 'text-violet-800 group-hover:text-violet-950'
+                                : 'text-slate-800 group-hover:text-slate-950'
+                          }`}
+                        >
+                          {day}
+                        </span>
+                        {isClickable && (
+                          <span className='text-[10px] font-medium text-cyan-600/0 transition group-hover:text-cyan-600'>
+                            + Add
+                          </span>
+                        )}
+                      </div>
+                      {dayPosts.length > 0 && (
+                        <div className='min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden'>
+                          {dayPosts.map((p) => (
+                            <div key={p._id} className='flex items-start gap-1'>
+                              {canManageSocialCalendar() ? (
+                                <button
+                                  type='button'
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleEditPost(p)
+                                  }}
+                                  className='flex min-w-0 flex-1 items-start gap-1.5 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1.5 text-left text-[11px] leading-tight text-slate-800 shadow-sm transition hover:border-cyan-300/80 hover:bg-cyan-50/40 hover:shadow'
+                                >
+                                  <span
+                                    className={`mt-1 h-2 w-2 shrink-0 rounded-full bg-gradient-to-br ${platformAccentGradient(p.platform)} ring-2 ring-white`}
+                                    title={p.platform}
+                                  />
+                                  <span className='min-w-0 flex-1'>
+                                    <span className='line-clamp-2 font-medium'>{p.title}</span>
+                                    <span
+                                      className={`mt-0.5 inline-flex rounded px-1.5 py-px text-[9px] font-semibold ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}
+                                    >
+                                      {p.clientReviewStatus || 'Pending'}
+                                    </span>
+                                    {getAssignedNames(p.assignedTo) && (
+                                      <span className='mt-0.5 block truncate text-[10px] text-cyan-700'>
+                                        {getAssignedNames(p.assignedTo)}
+                                      </span>
+                                    )}
+                                  </span>
+                                </button>
+                              ) : (
+                                <span className='flex min-w-0 flex-1 items-start gap-1.5 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1.5 text-[11px] leading-tight text-slate-800 shadow-sm'>
+                                  <span
+                                    className={`mt-1 h-2 w-2 shrink-0 rounded-full bg-gradient-to-br ${platformAccentGradient(p.platform)}`}
+                                  />
+                                  <span className='min-w-0 flex-1'>
+                                    <span className='line-clamp-2 font-medium'>{p.title}</span>
+                                    <span
+                                      className={`mt-0.5 inline-flex rounded px-1.5 py-px text-[9px] font-semibold ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}
+                                    >
+                                      {p.clientReviewStatus || 'Pending'}
+                                    </span>
+                                    {getAssignedNames(p.assignedTo) && (
+                                      <span className='mt-0.5 block truncate text-[10px] text-cyan-700'>
+                                        {getAssignedNames(p.assignedTo)}
+                                      </span>
+                                    )}
+                                  </span>
+                                </span>
+                              )}
+                              {p.referenceLink && (
+                                <a
+                                  href={p.referenceLink}
+                                  target='_blank'
+                                  rel='noopener noreferrer'
+                                  onClick={(e) => e.stopPropagation()}
+                                  className='mt-0.5 shrink-0 rounded-md p-1 text-cyan-600 transition hover:bg-cyan-100'
+                                  title='Open reference link'
+                                >
+                                  <svg className='h-3.5 w-3.5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                    <path
+                                      strokeLinecap='round'
+                                      strokeLinejoin='round'
+                                      strokeWidth={2}
+                                      d='M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14'
+                                    />
+                                  </svg>
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
 
           {/* Upcoming Posts Sidebar */}
-          <div className='bg-white rounded-lg shadow p-6'>
-            <h2 className='text-lg font-bold text-gray-900 mb-4'>Upcoming Posts</h2>
+          <div className='overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.06)]'>
+            <div className='border-b border-slate-100 bg-gradient-to-r from-slate-50 to-cyan-50/40 px-5 py-4'>
+              <h2 className='text-base font-bold text-slate-900'>Upcoming posts</h2>
+              <p className='mt-0.5 text-xs text-slate-500'>Next scheduled items</p>
+            </div>
+            <div className='p-5'>
             {posts.length === 0 ? (
-              <p className='text-sm text-gray-500'>No scheduled posts yet.</p>
+              <div className='rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center'>
+                <p className='text-sm font-medium text-slate-600'>No scheduled posts yet</p>
+                <p className='mt-1 text-xs text-slate-400'>Add a post from the calendar or use “New post”</p>
+              </div>
             ) : (
-              <div className='space-y-3'>
+              <div className='space-y-2.5'>
                 {posts
                   .filter((p) => p.scheduledTime)
                   .sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime))
                   .slice(0, 10)
                   .map((p) => (
-                    <div key={p._id} className='flex items-start gap-2 pb-3 border-b border-gray-100 last:border-0'>
+                    <div
+                      key={p._id}
+                      className='flex items-start gap-2 rounded-xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/60 p-3 shadow-sm'
+                    >
+                      <span
+                        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full bg-gradient-to-br ${platformAccentGradient(p.platform)} ring-2 ring-white`}
+                        title={p.platform}
+                      />
                       {canManageSocialCalendar() ? (
                         <button
                           type='button'
                           onClick={() => handleEditPost(p)}
-                          className='flex-1 min-w-0 text-left hover:bg-gray-50 -mx-2 px-2 rounded transition-colors'
+                          className='min-w-0 flex-1 text-left transition hover:opacity-90'
                         >
-                          <p className='text-sm font-semibold text-gray-900'>{p.title}</p>
-                          <p className='text-xs text-gray-600'>
-                            {new Date(p.scheduledTime).toLocaleDateString()} • {p.platform}
+                          <p className='text-sm font-semibold text-slate-900'>{p.title}</p>
+                          <p className='mt-0.5 text-xs text-slate-500'>
+                            {new Date(p.scheduledTime).toLocaleDateString(undefined, {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                            })}{' '}
+                            • {p.platform}
                             {getAssignedNames(p.assignedTo) && ` • ${getAssignedNames(p.assignedTo)}`}
                           </p>
-                          <span className={`inline-flex mt-1 px-2 py-0.5 rounded text-[10px] ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}>
+                          <span
+                            className={`mt-1.5 inline-flex rounded-md px-2 py-0.5 text-[10px] font-semibold ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}
+                          >
                             {p.clientReviewStatus || 'Pending'}
                           </span>
                         </button>
                       ) : (
-                        <div className='flex-1 min-w-0 -mx-2 px-2'>
-                          <p className='text-sm font-semibold text-gray-900'>{p.title}</p>
-                          <p className='text-xs text-gray-600'>
-                            {new Date(p.scheduledTime).toLocaleDateString()} • {p.platform}
+                        <div className='min-w-0 flex-1'>
+                          <p className='text-sm font-semibold text-slate-900'>{p.title}</p>
+                          <p className='mt-0.5 text-xs text-slate-500'>
+                            {new Date(p.scheduledTime).toLocaleDateString(undefined, {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                            })}{' '}
+                            • {p.platform}
                             {getAssignedNames(p.assignedTo) && ` • ${getAssignedNames(p.assignedTo)}`}
                           </p>
-                          <span className={`inline-flex mt-1 px-2 py-0.5 rounded text-[10px] ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}>
+                          <span
+                            className={`mt-1.5 inline-flex rounded-md px-2 py-0.5 text-[10px] font-semibold ${CLIENT_REVIEW_BADGE[p.clientReviewStatus || 'Pending'] || CLIENT_REVIEW_BADGE.Pending}`}
+                          >
                             {p.clientReviewStatus || 'Pending'}
                           </span>
                         </div>
@@ -636,10 +800,10 @@ const SocialCalendarView = () => {
                           href={p.referenceLink}
                           target='_blank'
                           rel='noopener noreferrer'
-                          className='flex-shrink-0 p-1.5 rounded text-cyan-600 hover:bg-cyan-50'
+                          className='shrink-0 rounded-lg p-1.5 text-cyan-600 transition hover:bg-cyan-50'
                           title='Open reference link'
                         >
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                          <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                             <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' />
                           </svg>
                         </a>
@@ -648,64 +812,95 @@ const SocialCalendarView = () => {
                   ))}
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
 
       {/* Add / Edit Post Modal - only for users who can manage */}
       {canManageSocialCalendar() && ((showAddPost || editingPost) && selectedClient) && (
-        <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'>
-          <div className='bg-white rounded-xl shadow-xl max-w-md w-full p-6'>
-            <h3 className='text-lg font-bold text-gray-900 mb-4'>
-              {editingPost ? 'Edit Post' : 'Add Social Media Post'}
-            </h3>
-            <form onSubmit={editingPost ? handleUpdatePost : handleAddPost} className='space-y-4'>
-              <div className='grid grid-cols-2 gap-4'>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-1'>Title</label>
-                  <input
-                    type='text'
-                    value={postForm.title}
-                    onChange={(e) => setPostForm((f) => ({ ...f, title: e.target.value }))}
-                    required
-                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                    placeholder='Post title'
-                  />
-                </div>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-1'>Post Type</label>
-                  <select
-                    value={postForm.contentType}
-                    onChange={(e) => setPostForm((f) => ({ ...f, contentType: e.target.value }))}
-                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                  >
-                    {CONTENT_TYPES.map((type) => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
+        <div className='fixed inset-0 z-50 overflow-y-auto'>
+          <div className='flex min-h-full items-center justify-center bg-black/50 p-4 sm:p-6'>
+            <div className='relative w-full max-w-4xl max-h-[min(90vh,calc(100dvh-2rem))] overflow-y-auto rounded-xl bg-white p-6 shadow-xl'>
+              <h3 className='text-lg font-bold text-gray-900 mb-4'>
+                {editingPost ? 'Edit Post' : 'Add Social Media Post'}
+              </h3>
+              <form onSubmit={editingPost ? handleUpdatePost : handleAddPost} className='grid grid-cols-4 gap-4'>
+              <div className='col-span-1'>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Title</label>
+                <input
+                  type='text'
+                  value={postForm.title}
+                  onChange={(e) => setPostForm((f) => ({ ...f, title: e.target.value }))}
+                  required
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                  placeholder='Post title'
+                />
               </div>
+              <div className='col-span-1'>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Post Type</label>
+                <select
+                  value={postForm.contentType}
+                  onChange={(e) => setPostForm((f) => ({ ...f, contentType: e.target.value }))}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                >
+                  {CONTENT_TYPES.map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+              <div className='col-span-1'>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Platform</label>
+                <select
+                  value={postForm.platform}
+                  onChange={(e) => setPostForm((f) => ({ ...f, platform: e.target.value }))}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                >
+                  {PLATFORMS.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className='col-span-1'>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Status</label>
+                <select
+                  value={postForm.status}
+                  onChange={(e) => setPostForm((f) => ({ ...f, status: e.target.value }))}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                >
+                  <option value='Scheduled'>Scheduled</option>
+                  <option value='Published'>Published</option>
+                  <option value='Draft'>Draft</option>
+                  <option value='Cancelled'>Cancelled</option>
+                </select>
+              </div>
+
               {postForm.contentType === 'Carousel' ? (
-                <div className='space-y-2'>
-                  <div className='flex items-center justify-between'>
-                    <label className='block text-sm font-medium text-gray-700'>Carousel Slides</label>
-                    <button
-                      type='button'
-                      onClick={() =>
-                        setPostForm((f) => ({
-                          ...f,
-                          carouselItems: [...(f.carouselItems || []), { subject: '', description: '' }],
-                        }))
-                      }
-                      className='text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50'
-                    >
-                      + Add Slide
-                    </button>
+                <div className='col-span-4 space-y-3'>
+                  <div className='grid grid-cols-4 gap-4 items-end'>
+                    <div className='col-span-3'>
+                      <label className='block text-sm font-medium text-gray-700 mb-1'>Carousel Slides</label>
+                      <p className='text-xs text-gray-500'>Add each slide as subject + description.</p>
+                    </div>
+                    <div className='col-span-1 flex justify-end pb-0.5'>
+                      <button
+                        type='button'
+                        onClick={() =>
+                          setPostForm((f) => ({
+                            ...f,
+                            carouselItems: [...(f.carouselItems || []), { subject: '', description: '' }],
+                          }))
+                        }
+                        className='text-xs px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 w-full sm:w-auto whitespace-nowrap'
+                      >
+                        + Add Slide
+                      </button>
+                    </div>
                   </div>
                   {(postForm.carouselItems || []).map((item, index) => (
-                    <div key={index} className='border border-gray-200 rounded-lg p-3 space-y-2'>
-                      <div className='flex items-center justify-between'>
-                        <p className='text-xs font-semibold text-gray-600'>Post {index + 1}</p>
+                    <div key={index} className='border border-gray-200 rounded-lg p-3 grid grid-cols-4 gap-4'>
+                      <div className='col-span-4 flex items-center justify-between gap-2'>
+                        <p className='text-xs font-semibold text-gray-600'>Slide {index + 1}</p>
                         {(postForm.carouselItems || []).length > 1 && (
                           <button
                             type='button'
@@ -715,46 +910,52 @@ const SocialCalendarView = () => {
                                 carouselItems: f.carouselItems.filter((_, idx) => idx !== index),
                               }))
                             }
-                            className='text-xs text-red-600 hover:text-red-700'
+                            className='text-xs text-red-600 hover:text-red-700 shrink-0'
                           >
                             Remove
                           </button>
                         )}
                       </div>
-                      <input
-                        type='text'
-                        value={item.subject}
-                        onChange={(e) =>
-                          setPostForm((f) => ({
-                            ...f,
-                            carouselItems: f.carouselItems.map((slide, idx) =>
-                              idx === index ? { ...slide, subject: e.target.value } : slide
-                            ),
-                          }))
-                        }
-                        placeholder='Subject'
-                        className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                      />
-                      <textarea
-                        value={item.description}
-                        onChange={(e) =>
-                          setPostForm((f) => ({
-                            ...f,
-                            carouselItems: f.carouselItems.map((slide, idx) =>
-                              idx === index ? { ...slide, description: e.target.value } : slide
-                            ),
-                          }))
-                        }
-                        rows={2}
-                        placeholder='Description'
-                        className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                      />
+                      <div className='col-span-2'>
+                        <label className='block text-xs font-medium text-gray-600 mb-1'>Subject</label>
+                        <input
+                          type='text'
+                          value={item.subject}
+                          onChange={(e) =>
+                            setPostForm((f) => ({
+                              ...f,
+                              carouselItems: f.carouselItems.map((slide, idx) =>
+                                idx === index ? { ...slide, subject: e.target.value } : slide
+                              ),
+                            }))
+                          }
+                          placeholder='Subject'
+                          className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                        />
+                      </div>
+                      <div className='col-span-2'>
+                        <label className='block text-xs font-medium text-gray-600 mb-1'>Description</label>
+                        <textarea
+                          value={item.description}
+                          onChange={(e) =>
+                            setPostForm((f) => ({
+                              ...f,
+                              carouselItems: f.carouselItems.map((slide, idx) =>
+                                idx === index ? { ...slide, description: e.target.value } : slide
+                              ),
+                            }))
+                          }
+                          rows={2}
+                          placeholder='Description'
+                          className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <>
-                  <div>
+                  <div className='col-span-2'>
                     <label className='block text-sm font-medium text-gray-700 mb-1'>Subject</label>
                     <input
                       type='text'
@@ -764,7 +965,7 @@ const SocialCalendarView = () => {
                       placeholder='Post subject'
                     />
                   </div>
-                  <div>
+                  <div className='col-span-2'>
                     <label className='block text-sm font-medium text-gray-700 mb-1'>Description</label>
                     <textarea
                       value={postForm.description}
@@ -776,66 +977,39 @@ const SocialCalendarView = () => {
                   </div>
                 </>
               )}
-              <div className='grid grid-cols-2 gap-4'>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-1'>Platform</label>
-                  <select
-                    value={postForm.platform}
-                    onChange={(e) => setPostForm((f) => ({ ...f, platform: e.target.value }))}
-                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                  >
-                    {PLATFORMS.map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-1'>Scheduled Date & Time</label>
-                  <input
-                    type='datetime-local'
-                    value={postForm.scheduledTime}
-                    onChange={(e) => setPostForm((f) => ({ ...f, scheduledTime: e.target.value }))}
-                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                  />
-                </div>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-1'>Status</label>
-                  <select
-                    value={postForm.status}
-                    onChange={(e) => setPostForm((f) => ({ ...f, status: e.target.value }))}
-                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                  >
-                    <option value='Scheduled'>Scheduled</option>
-                    <option value='Published'>Published</option>
-                    <option value='Draft'>Draft</option>
-                    <option value='Cancelled'>Cancelled</option>
-                  </select>
-                </div>
+
+              <div className='col-span-2'>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Scheduled Date & Time</label>
+                <input
+                  type='datetime-local'
+                  value={postForm.scheduledTime}
+                  onChange={(e) => setPostForm((f) => ({ ...f, scheduledTime: e.target.value }))}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                />
               </div>
-              <div className='grid grid-cols-2 gap-4'>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-1'>Reference Link <span className='text-gray-400 font-normal'>(optional)</span></label>
-                  <input
-                    type='url'
-                    value={postForm.referenceLink}
-                    onChange={(e) => setPostForm((f) => ({ ...f, referenceLink: e.target.value }))}
-                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                    placeholder='https://...'
-                  />
-                </div>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-1'>Upload Reference <span className='text-gray-400 font-normal'>(optional)</span></label>
-                  <input
-                    type='file'
-                    onChange={handleReferenceUpload}
-                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                  />
-                  {postForm.referenceUpload?.fileName && (
-                    <p className='text-xs text-gray-500 mt-1 truncate'>{postForm.referenceUpload.fileName}</p>
-                  )}
-                </div>
+              <div className='col-span-2'>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Reference Link <span className='text-gray-400 font-normal'>(optional)</span></label>
+                <input
+                  type='url'
+                  value={postForm.referenceLink}
+                  onChange={(e) => setPostForm((f) => ({ ...f, referenceLink: e.target.value }))}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                  placeholder='https://...'
+                />
               </div>
-              <div ref={assigneeRef}>
+
+              <div className='col-span-1'>
+                <label className='block text-sm font-medium text-gray-700 mb-1'>Upload Reference <span className='text-gray-400 font-normal'>(optional)</span></label>
+                <input
+                  type='file'
+                  onChange={handleReferenceUpload}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                />
+                {postForm.referenceUpload?.fileName && (
+                  <p className='text-xs text-gray-500 mt-1 truncate'>{postForm.referenceUpload.fileName}</p>
+                )}
+              </div>
+              <div className='col-span-3' ref={assigneeRef}>
                 <label className='block text-sm font-medium text-gray-700 mb-1'>Assign To <span className='text-gray-400 font-normal'>(optional, multiple)</span></label>
                 <div className='relative'>
                   <input
@@ -867,9 +1041,9 @@ const SocialCalendarView = () => {
                               toggleAssignedEmployee(emp._id)
                               setAssigneeSearch('')
                             }}
-                            className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${postForm.assignedTo.includes(emp._id) ? 'bg-cyan-50 text-cyan-800' : ''}`}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${postForm.assignedTo.some((id) => assigneeIdKey(id) === assigneeIdKey(emp._id)) ? 'bg-cyan-50 text-cyan-800' : ''}`}
                           >
-                            {postForm.assignedTo.includes(emp._id) && (
+                            {postForm.assignedTo.some((id) => assigneeIdKey(id) === assigneeIdKey(emp._id)) && (
                               <svg className='w-4 h-4 flex-shrink-0' fill='currentColor' viewBox='0 0 20 20'>
                                 <path fillRule='evenodd' d='M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z' clipRule='evenodd' />
                               </svg>
@@ -884,7 +1058,7 @@ const SocialCalendarView = () => {
                 {postForm.assignedTo.length > 0 && (
                   <div className='flex flex-wrap gap-1.5 mt-2'>
                     {postForm.assignedTo.map((id) => {
-                      const emp = employees.find((e) => e._id === id)
+                      const emp = employees.find((e) => assigneeIdKey(e._id) === assigneeIdKey(id))
                       return emp ? (
                         <span
                           key={id}
@@ -905,7 +1079,7 @@ const SocialCalendarView = () => {
                   </div>
                 )}
               </div>
-              <div className='flex gap-3 pt-2'>
+              <div className='col-span-4 flex gap-3 pt-2 border-t border-gray-100 mt-1'>
                 <button
                   type='submit'
                   className='flex-1 bg-cyan-600 hover:bg-cyan-700 text-white py-2 rounded-lg text-sm font-medium'
@@ -920,7 +1094,8 @@ const SocialCalendarView = () => {
                   Cancel
                 </button>
               </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}

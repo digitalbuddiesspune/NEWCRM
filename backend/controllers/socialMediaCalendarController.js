@@ -1,11 +1,22 @@
 import SocialMediaCalendar from '../models/socialMediaCalendar.js';
 import { syncClientProfile } from '../utils/clientProfileSync.js';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 
 const generateShareToken = () => crypto.randomBytes(24).toString('hex');
 
-const normalizeAssignedTo = (assignedTo) =>
-  Array.isArray(assignedTo) ? assignedTo : (assignedTo ? [assignedTo] : []);
+const toEmployeeObjectId = (raw) => {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'object' && raw._id != null) raw = raw._id;
+  const s = typeof raw === 'string' ? raw.trim() : String(raw);
+  if (!s || !mongoose.isValidObjectId(s)) return null;
+  return new mongoose.Types.ObjectId(s);
+};
+
+const normalizeAssignedTo = (assignedTo) => {
+  const arr = Array.isArray(assignedTo) ? assignedTo : assignedTo ? [assignedTo] : [];
+  return arr.map(toEmployeeObjectId).filter(Boolean);
+};
 
 const normalizeCarouselItems = (items) => {
   if (!Array.isArray(items)) return [];

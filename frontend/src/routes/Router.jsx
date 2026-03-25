@@ -23,6 +23,7 @@ import AttendanceView from '../components/views/AttendanceView'
 import AddLead from '../pages/AddLead'
 import Settings from '../pages/Settings'
 import AssignTask from '../pages/AssignTask'
+import TaskDetailPage from '../pages/TaskDetailPage'
 import CollaboratorsView from '../components/views/CollaboratorsView'
 import AddCollaborator from '../pages/AddCollaborator'
 import LeaveView from '../components/views/LeaveView'
@@ -79,7 +80,9 @@ const router = createBrowserRouter([
             { path: 'assign-task', element: <AssignTask /> },
             { path: 'reports', element: <ReportsView /> },
             { path: 'tasks', element: <TasksView /> },
+            { path: 'tasks/:taskId', element: <TaskDetailPage /> },
             { path: 'my-tasks', element: <TasksView isMyTasks /> },
+            { path: 'my-tasks/:taskId', element: <TaskDetailPage isMyTasks /> },
             { path: 'calendar', element: <CalendarView /> },
             { path: 'social-calendar', element: <SocialCalendarView /> },
             // HR placeholders

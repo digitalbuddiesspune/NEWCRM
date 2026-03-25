@@ -133,7 +133,7 @@ const LeadsView = () => {
               onChange={(e) => handleFilterChange('status', e.target.value)}
               className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
             >
-              <option value=''>All</option>
+              <option value=''>All status</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
@@ -251,8 +251,20 @@ const LeadsView = () => {
                 </tr>
               ) : (
                 leads.map((l) => (
-                  <tr key={l._id} className='border-b hover:bg-gray-50'>
-                    <td className='px-4 py-3 font-medium'>{l.name}</td>
+                  <tr
+                    key={l._id}
+                    className='border-b hover:bg-gray-50 cursor-pointer transition-colors'
+                    onClick={() => navigate(`/leads/view/${l._id}`)}
+                    role='link'
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        navigate(`/leads/view/${l._id}`)
+                      }
+                    }}
+                  >
+                    <td className='px-4 py-3 font-medium text-indigo-700'>{l.name}</td>
                     <td className='px-4 py-3'>{l.businessName}</td>
                     <td className='px-4 py-3'>{l.contactNumber}</td>
                     <td className='px-4 py-3'>{l.businessType || '—'}</td>
@@ -264,16 +276,18 @@ const LeadsView = () => {
                       </span>
                     </td>
                     <td className='px-4 py-3'>{l.generatedBy?.name || '—'}</td>
-                    <td className='px-4 py-3'>
+                    <td className='px-4 py-3 cursor-default' onClick={(e) => e.stopPropagation()}>
                       <div className='flex items-center gap-2'>
                         <button
+                          type='button'
                           onClick={() => navigate(`/leads/view/${l._id}`)}
                           className='p-1.5 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors'
-                          title='View'
+                          title='View details'
                         >
                           <ViewIcon />
                         </button>
                         <button
+                          type='button'
                           onClick={() => navigate(`/leads/edit/${l._id}`)}
                           className='p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors'
                           title='Edit'

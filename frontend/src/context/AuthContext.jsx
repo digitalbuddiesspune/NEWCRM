@@ -58,18 +58,8 @@ export const AuthProvider = ({ children }) => {
     return ['hr manager', 'technical lead', 'senior software engineer', 'product manager'].includes(title)
   }
 
-  const canManageSocialCalendar = () => {
-    const title = (user?.designation?.title || user?.designation?.name || '').toLowerCase()
-    return [
-      'social media manager',
-      'hr manager',
-      'technical lead',
-      'project manager',
-      'product manager',
-      'engineering manager',
-      'senior software engineer',
-    ].includes(title)
-  }
+  /** Any logged-in employee can add/edit posts on the social media calendar. */
+  const canManageSocialCalendar = () => Boolean(user)
 
   const canViewProjects = () => {
     const title = (user?.designation?.title || user?.designation?.name || '').toLowerCase()
