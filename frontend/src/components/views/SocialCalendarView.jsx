@@ -43,6 +43,15 @@ const assigneeIdKey = (raw) => {
   const v = typeof raw === 'object' && raw._id != null ? raw._id : raw
   return String(v)
 }
+const toId = (raw) => {
+  if (raw == null || raw === '') return ''
+  if (typeof raw === 'object') {
+    if (raw._id != null) return toId(raw._id)
+    if (raw.id != null) return toId(raw.id)
+    return typeof raw.toString === 'function' ? raw.toString() : ''
+  }
+  return String(raw)
+}
 
 const SocialCalendarView = () => {
   const { canManageSocialCalendar } = useAuth()
@@ -95,7 +104,7 @@ const SocialCalendarView = () => {
     try {
       setLoading(true)
       setError(null)
-      const res = await api.get(`/social-calendars/client/${selectedClient._id}`, { params: { projectId: selectedProjectId } })
+      const res = await api.get(`/social-calendars/client/${toId(selectedClient._id || selectedClient.id)}`, { params: { projectId: toId(selectedProjectId) } })
       setCalendar(res.data)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error loading calendar')
@@ -122,7 +131,11 @@ const SocialCalendarView = () => {
     try {
       const res = await api.get('/projects')
       const list = Array.isArray(res.data) ? res.data : res.data?.data || []
-      setProjects(list.filter((p) => String(p?.client?._id || p?.client || '') === String(clientId)))
+      setProjects(
+        list
+          .filter((p) => toId(p?.client?._id || p?.client) === toId(clientId))
+          .map((p) => ({ ...p, _id: toId(p?._id || p?.id) }))
+      )
     } catch (err) {
       console.error('Failed to fetch projects:', err)
       setProjects([])
@@ -178,7 +191,7 @@ const SocialCalendarView = () => {
     setClientOpen(false)
     setSelectedProjectId('')
     setCalendar(null)
-    fetchProjectsByClient(client._id)
+    fetchProjectsByClient(toId(client._id || client.id))
   }
 
   const handleAddPost = async (e) => {
@@ -186,13 +199,13 @@ const SocialCalendarView = () => {
     if (!selectedClient || !selectedProjectId || !postForm.title.trim()) return
     setSavingPost(true)
     try {
-      const res = await api.post(`/social-calendars/client/${selectedClient._id}/posts`, {
+      const res = await api.post(`/social-calendars/client/${toId(selectedClient._id || selectedClient.id)}/posts`, {
         ...postForm,
-        projectId: selectedProjectId,
+        projectId: toId(selectedProjectId),
         title: postForm.title || postForm.subject || 'Social Post',
         scheduledTime: postForm.scheduledTime || undefined,
         assignedTo: Array.isArray(postForm.assignedTo) ? postForm.assignedTo : [],
-      }, { params: { projectId: selectedProjectId } })
+      }, { params: { projectId: toId(selectedProjectId) } })
       setCalendar(res.data?.calendar ?? res.data)
       setAssigneeSearch('')
       setAssigneeOpen(false)
@@ -247,14 +260,14 @@ const SocialCalendarView = () => {
     setSavingPost(true)
     try {
       const res = await api.put(
-        `/social-calendars/client/${selectedClient._id}/posts/${editingPost._id}`,
+        `/social-calendars/client/${toId(selectedClient._id || selectedClient.id)}/posts/${editingPost._id}`,
         {
           ...postForm,
-          projectId: selectedProjectId,
+          projectId: toId(selectedProjectId),
           scheduledTime: postForm.scheduledTime || undefined,
           assignedTo: Array.isArray(postForm.assignedTo) ? postForm.assignedTo : [],
         },
-        { params: { projectId: selectedProjectId } }
+        { params: { projectId: toId(selectedProjectId) } }
       )
       setCalendar(res.data?.calendar ?? res.data)
       setEditingPost(null)
