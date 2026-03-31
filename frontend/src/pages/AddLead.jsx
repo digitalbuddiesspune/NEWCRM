@@ -347,7 +347,12 @@ const AddLead = ({ readOnly = false }) => {
                 </div>
                 <div>
                   <label className='block text-sm font-medium text-gray-700'>Status</label>
-                  <select name='status' value={form.status} onChange={handleChange} className={inputClass}>
+                  <select
+                    name='status'
+                    value={form.status}
+                    onChange={handleChange}
+                    className={`${inputClass} whitespace-nowrap overflow-hidden text-ellipsis`}
+                  >
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}

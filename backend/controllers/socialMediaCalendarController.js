@@ -4,6 +4,21 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 
 const generateShareToken = () => crypto.randomBytes(24).toString('hex');
+const toObjectIdOrNull = (raw) => {
+  if (raw == null || raw === '') return null;
+  const v = typeof raw === 'object' && raw._id != null ? raw._id : raw;
+  const s = String(v).trim();
+  if (!s || !mongoose.isValidObjectId(s)) return null;
+  return new mongoose.Types.ObjectId(s);
+};
+const calendarFilterFromReq = (req) => {
+  const clientId = toObjectIdOrNull(req.params.clientId || req.body?.client || req.query?.client);
+  const projectId = toObjectIdOrNull(req.query?.projectId || req.body?.project || req.body?.projectId);
+  const filter = {};
+  if (clientId) filter.client = clientId;
+  filter.project = projectId || null;
+  return { filter, projectId };
+};
 
 const toEmployeeObjectId = (raw) => {
   if (raw == null || raw === '') return null;
@@ -62,10 +77,8 @@ const sanitizeClientViewPost = (post) => ({
 
 export const getCalendars = async (req, res) => {
   try {
-    const { client } = req.query;
-    const filter = {};
-    if (client) filter.client = client;
-    const calendars = await SocialMediaCalendar.find(filter).populate('client');
+    const { filter } = calendarFilterFromReq(req);
+    const calendars = await SocialMediaCalendar.find(filter).populate('client').populate('project');
     res.status(200).json(calendars);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching calendars', error });
@@ -74,17 +87,21 @@ export const getCalendars = async (req, res) => {
 
 export const getCalendarByClient = async (req, res) => {
   try {
-    let calendar = await SocialMediaCalendar.findOne({ client: req.params.clientId })
+    const { filter, projectId } = calendarFilterFromReq(req);
+    if (!filter.client) return res.status(400).json({ message: 'Invalid client id' });
+    let calendar = await SocialMediaCalendar.findOne(filter)
       .populate('client')
+      .populate('project')
       .populate('posts.assignedTo');
     if (!calendar) {
       calendar = await SocialMediaCalendar.create({
-        client: req.params.clientId,
+        client: filter.client,
+        project: projectId || null,
         posts: [],
         shareToken: generateShareToken(),
       });
-      await calendar.populate('client');
-      await syncClientProfile({ clientId: req.params.clientId });
+      await calendar.populate('client').populate('project');
+      await syncClientProfile({ clientId: filter.client });
     } else if (!calendar.shareToken) {
       calendar.shareToken = generateShareToken();
       await calendar.save();
@@ -97,8 +114,9 @@ export const getCalendarByClient = async (req, res) => {
 
 export const createCalendar = async (req, res) => {
   try {
-    const { client } = req.body;
-    const existing = await SocialMediaCalendar.findOne({ client }).populate('client');
+    const { filter, projectId } = calendarFilterFromReq(req);
+    if (!filter.client) return res.status(400).json({ message: 'Invalid client id' });
+    const existing = await SocialMediaCalendar.findOne(filter).populate('client').populate('project');
     if (existing) {
       if (!existing.shareToken) {
         existing.shareToken = generateShareToken();
@@ -106,10 +124,10 @@ export const createCalendar = async (req, res) => {
       }
       return res.status(200).json({ message: 'Calendar exists', calendar: existing });
     }
-    const calendar = new SocialMediaCalendar({ client, posts: [], shareToken: generateShareToken() });
+    const calendar = new SocialMediaCalendar({ client: filter.client, project: projectId || null, posts: [], shareToken: generateShareToken() });
     await calendar.save();
-    await syncClientProfile({ clientId: client });
-    const populated = await SocialMediaCalendar.findById(calendar._id).populate('client');
+    await syncClientProfile({ clientId: filter.client });
+    const populated = await SocialMediaCalendar.findById(calendar._id).populate('client').populate('project');
     res.status(201).json({ message: 'Calendar created', calendar: populated });
   } catch (error) {
     res.status(500).json({ message: 'Error creating calendar', error });
@@ -131,10 +149,13 @@ export const addPost = async (req, res) => {
       referenceUpload,
       assignedTo,
     } = req.body;
-    let calendar = await SocialMediaCalendar.findOne({ client: req.params.clientId });
+    const { filter, projectId } = calendarFilterFromReq(req);
+    if (!filter.client) return res.status(400).json({ message: 'Invalid client id' });
+    let calendar = await SocialMediaCalendar.findOne(filter);
     if (!calendar) {
       calendar = new SocialMediaCalendar({
-        client: req.params.clientId,
+        client: filter.client,
+        project: projectId || null,
         posts: [],
         shareToken: generateShareToken(),
       });
@@ -162,8 +183,8 @@ export const addPost = async (req, res) => {
       assignedTo: normalizeAssignedTo(assignedTo),
     });
     await calendar.save();
-    await syncClientProfile({ clientId: req.params.clientId });
-    const populated = await SocialMediaCalendar.findById(calendar._id).populate('client').populate('posts.assignedTo');
+    await syncClientProfile({ clientId: filter.client });
+    const populated = await SocialMediaCalendar.findById(calendar._id).populate('client').populate('project').populate('posts.assignedTo');
     res.status(201).json({ message: 'Post added', calendar: populated });
   } catch (error) {
     res.status(500).json({ message: 'Error adding post', error });
@@ -188,7 +209,8 @@ export const updatePost = async (req, res) => {
       clientNote,
       uploadedLinks,
     } = req.body;
-    const calendar = await SocialMediaCalendar.findOne({ client: req.params.clientId });
+    const { filter } = calendarFilterFromReq(req);
+    const calendar = await SocialMediaCalendar.findOne(filter);
     if (!calendar) return res.status(404).json({ message: 'Calendar not found' });
     const post = calendar.posts.id(req.params.postId);
     if (!post) return res.status(404).json({ message: 'Post not found' });
@@ -220,8 +242,8 @@ export const updatePost = async (req, res) => {
         }));
     }
     await calendar.save();
-    await syncClientProfile({ clientId: req.params.clientId });
-    const populated = await SocialMediaCalendar.findById(calendar._id).populate('client').populate('posts.assignedTo');
+    await syncClientProfile({ clientId: filter.client });
+    const populated = await SocialMediaCalendar.findById(calendar._id).populate('client').populate('project').populate('posts.assignedTo');
     res.status(200).json({ message: 'Post updated', calendar: populated });
   } catch (error) {
     res.status(500).json({ message: 'Error updating post', error });
@@ -230,12 +252,13 @@ export const updatePost = async (req, res) => {
 
 export const deletePost = async (req, res) => {
   try {
-    const calendar = await SocialMediaCalendar.findOne({ client: req.params.clientId });
+    const { filter } = calendarFilterFromReq(req);
+    const calendar = await SocialMediaCalendar.findOne(filter);
     if (!calendar) return res.status(404).json({ message: 'Calendar not found' });
     calendar.posts.pull(req.params.postId);
     await calendar.save();
-    await syncClientProfile({ clientId: req.params.clientId });
-    const populated = await SocialMediaCalendar.findById(calendar._id).populate('client');
+    await syncClientProfile({ clientId: filter.client });
+    const populated = await SocialMediaCalendar.findById(calendar._id).populate('client').populate('project');
     res.status(200).json({ message: 'Post deleted', calendar: populated });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting post', error });
@@ -246,6 +269,7 @@ export const getCalendarByShareToken = async (req, res) => {
   try {
     const calendar = await SocialMediaCalendar.findOne({ shareToken: req.params.token })
       .populate('client')
+      .populate('project')
       .populate('posts.uploadedLinks.addedBy', 'name');
 
     if (!calendar) return res.status(404).json({ message: 'Shared calendar not found' });
@@ -254,6 +278,7 @@ export const getCalendarByShareToken = async (req, res) => {
       _id: calendar._id,
       shareToken: calendar.shareToken,
       client: calendar.client ? { _id: calendar.client._id, clientName: calendar.client.clientName } : null,
+      project: calendar.project ? { _id: calendar.project._id, projectName: calendar.project.projectName } : null,
       posts: (calendar.posts || []).map(sanitizeClientViewPost),
       updatedAt: calendar.updatedAt,
     });
@@ -308,7 +333,8 @@ export const addUploadedLinkToPost = async (req, res) => {
       return res.status(400).json({ message: 'url is required' });
     }
 
-    const calendar = await SocialMediaCalendar.findOne({ client: req.params.clientId });
+    const { filter } = calendarFilterFromReq(req);
+    const calendar = await SocialMediaCalendar.findOne(filter);
     if (!calendar) return res.status(404).json({ message: 'Calendar not found' });
 
     const post = calendar.posts.id(req.params.postId);
@@ -324,6 +350,7 @@ export const addUploadedLinkToPost = async (req, res) => {
     await calendar.save();
     const populated = await SocialMediaCalendar.findById(calendar._id)
       .populate('client')
+      .populate('project')
       .populate('posts.assignedTo')
       .populate('posts.uploadedLinks.addedBy', 'name');
 

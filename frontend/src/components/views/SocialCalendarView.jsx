@@ -48,6 +48,8 @@ const SocialCalendarView = () => {
   const { canManageSocialCalendar } = useAuth()
   const [clients, setClients] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
+  const [projects, setProjects] = useState([])
+  const [selectedProjectId, setSelectedProjectId] = useState('')
   const [clientSearch, setClientSearch] = useState('')
   const [clientOpen, setClientOpen] = useState(false)
   const [calendar, setCalendar] = useState(null)
@@ -89,11 +91,11 @@ const SocialCalendarView = () => {
   }
 
   const fetchCalendar = async () => {
-    if (!selectedClient) return
+    if (!selectedClient || !selectedProjectId) return
     try {
       setLoading(true)
       setError(null)
-      const res = await api.get(`/social-calendars/client/${selectedClient._id}`)
+      const res = await api.get(`/social-calendars/client/${selectedClient._id}`, { params: { projectId: selectedProjectId } })
       setCalendar(res.data)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error loading calendar')
@@ -112,15 +114,30 @@ const SocialCalendarView = () => {
     }
   }
 
+  const fetchProjectsByClient = async (clientId) => {
+    if (!clientId) {
+      setProjects([])
+      return
+    }
+    try {
+      const res = await api.get('/projects')
+      const list = Array.isArray(res.data) ? res.data : res.data?.data || []
+      setProjects(list.filter((p) => String(p?.client?._id || p?.client || '') === String(clientId)))
+    } catch (err) {
+      console.error('Failed to fetch projects:', err)
+      setProjects([])
+    }
+  }
+
   useEffect(() => {
     fetchClients()
     fetchEmployees()
   }, [])
 
   useEffect(() => {
-    if (selectedClient) fetchCalendar()
+    if (selectedClient && selectedProjectId) fetchCalendar()
     else setCalendar(null)
-  }, [selectedClient])
+  }, [selectedClient, selectedProjectId])
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -159,19 +176,23 @@ const SocialCalendarView = () => {
     setSelectedClient(client)
     setClientSearch(client.clientName || '')
     setClientOpen(false)
+    setSelectedProjectId('')
+    setCalendar(null)
+    fetchProjectsByClient(client._id)
   }
 
   const handleAddPost = async (e) => {
     e.preventDefault()
-    if (!selectedClient || !postForm.title.trim()) return
+    if (!selectedClient || !selectedProjectId || !postForm.title.trim()) return
     setSavingPost(true)
     try {
       const res = await api.post(`/social-calendars/client/${selectedClient._id}/posts`, {
         ...postForm,
+        projectId: selectedProjectId,
         title: postForm.title || postForm.subject || 'Social Post',
         scheduledTime: postForm.scheduledTime || undefined,
         assignedTo: Array.isArray(postForm.assignedTo) ? postForm.assignedTo : [],
-      })
+      }, { params: { projectId: selectedProjectId } })
       setCalendar(res.data?.calendar ?? res.data)
       setAssigneeSearch('')
       setAssigneeOpen(false)
@@ -222,16 +243,18 @@ const SocialCalendarView = () => {
 
   const handleUpdatePost = async (e) => {
     e.preventDefault()
-    if (!selectedClient || !editingPost || !postForm.title.trim()) return
+    if (!selectedClient || !selectedProjectId || !editingPost || !postForm.title.trim()) return
     setSavingPost(true)
     try {
       const res = await api.put(
         `/social-calendars/client/${selectedClient._id}/posts/${editingPost._id}`,
         {
           ...postForm,
+          projectId: selectedProjectId,
           scheduledTime: postForm.scheduledTime || undefined,
           assignedTo: Array.isArray(postForm.assignedTo) ? postForm.assignedTo : [],
-        }
+        },
+        { params: { projectId: selectedProjectId } }
       )
       setCalendar(res.data?.calendar ?? res.data)
       setEditingPost(null)
@@ -512,11 +535,25 @@ const SocialCalendarView = () => {
             </ul>
           )}
         </div>
+        <div className='mt-4 max-w-md'>
+          <label className='block text-sm font-semibold text-gray-700 mb-2'>Select Project</label>
+          <select
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+            disabled={!selectedClient}
+            className='w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed'
+          >
+            <option value=''>{selectedClient ? 'Choose project...' : 'Select client first'}</option>
+            {projects.map((p) => (
+              <option key={p._id} value={p._id}>{p.projectName}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {!selectedClient ? (
+      {!selectedClient || !selectedProjectId ? (
         <div className='rounded-2xl border border-dashed border-slate-300/80 bg-white/60 py-16 text-center shadow-sm'>
-          <p className='text-sm font-medium text-slate-600'>Select a client to open their calendar</p>
+          <p className='text-sm font-medium text-slate-600'>Select a client and project to open the calendar</p>
           <p className='mx-auto mt-2 max-w-sm text-xs text-slate-400'>Search above to schedule posts, export, and manage reviews.</p>
         </div>
       ) : loading ? (

@@ -57,6 +57,11 @@ const socialMediaCalendarSchema = new mongoose.Schema({
     ref: 'Client',
     required: true,
   },
+  project: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    default: null,
+  },
   shareToken: { type: String, index: true },
   posts: [socialMediaPostSchema],
 }, { timestamps: true });
