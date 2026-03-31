@@ -610,10 +610,38 @@ const DashboardView = () => {
         ) : (
           <>
             <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8'>
-              <StatCard title='Total Tasks (Today)' value={todayTasks.length} icon={<ProjectsIcon />} color='border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100' iconColor='text-blue-500' />
-              <StatCard title='Total Pending Tasks' value={pendingTasks.length} icon={<ProjectsIcon />} color='border-amber-500 bg-gradient-to-br from-amber-50 to-amber-100' iconColor='text-amber-500' />
-              <StatCard title='Total Completed Tasks' value={completedTasks.length} icon={<ProjectsIcon />} color='border-green-500 bg-gradient-to-br from-green-50 to-green-100' iconColor='text-green-500' />
-              <StatCard title='Total Delayed Tasks' value={delayedTasks.length} icon={<ProjectsIcon />} color='border-red-500 bg-gradient-to-br from-red-50 to-red-100' iconColor='text-red-500' />
+              <StatCard
+                title='Total Tasks (Today)'
+                value={todayTasks.length}
+                icon={<ProjectsIcon />}
+                color='border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100'
+                iconColor='text-blue-500'
+                onClick={() => navigate(`/my-tasks?date=${todayStr}&status=All`)}
+              />
+              <StatCard
+                title='Total Pending Tasks'
+                value={pendingTasks.length}
+                icon={<ProjectsIcon />}
+                color='border-amber-500 bg-gradient-to-br from-amber-50 to-amber-100'
+                iconColor='text-amber-500'
+                onClick={() => navigate('/my-tasks?date=&status=Pending')}
+              />
+              <StatCard
+                title='Total Completed Tasks'
+                value={completedTasks.length}
+                icon={<ProjectsIcon />}
+                color='border-green-500 bg-gradient-to-br from-green-50 to-green-100'
+                iconColor='text-green-500'
+                onClick={() => navigate('/my-tasks?date=&status=Completed')}
+              />
+              <StatCard
+                title='Total Delayed Tasks'
+                value={delayedTasks.length}
+                icon={<ProjectsIcon />}
+                color='border-red-500 bg-gradient-to-br from-red-50 to-red-100'
+                iconColor='text-red-500'
+                onClick={() => navigate('/my-tasks?date=&status=Delayed')}
+              />
               <StatCard title='Total Meetings' value={meetings.length} icon={<UsersIcon />} color='border-purple-500 bg-gradient-to-br from-purple-50 to-purple-100' iconColor='text-purple-500' />
               <StatCard title='Meetings Attended' value={attendedMeetings.length} icon={<UsersIcon />} color='border-green-500 bg-gradient-to-br from-green-50 to-green-100' iconColor='text-green-500' />
               <StatCard title="Meetings Didn't Attend" value={notAttendedMeetings.length} icon={<UsersIcon />} color='border-gray-500 bg-gradient-to-br from-gray-50 to-gray-100' iconColor='text-gray-500' />
