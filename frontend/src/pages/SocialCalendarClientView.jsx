@@ -223,82 +223,129 @@ const SocialCalendarClientView = () => {
               const noteDraft = noteDraftByPost[post._id] || ''
               const preview = [...mediaCandidates(post), postPreviewImage(post)].find((src) => canRenderMedia(src))
               return (
-                <div key={post._id} className='bg-white border border-gray-200 rounded-xl p-4 shadow-sm'>
-                  <div className='flex flex-wrap items-start justify-between gap-3 mb-3'>
-                    <div>
-                      <p className='text-base font-semibold text-gray-900'>{post.title}</p>
-                      <p className='text-xs text-gray-600 mt-0.5'>
-                        {post.platform} • {post.contentType || 'Post'} • {post.scheduledTime ? new Date(post.scheduledTime).toLocaleString() : 'No schedule'}
-                      </p>
-                    </div>
-                    <span className={`inline-flex px-2 py-1 rounded text-xs font-semibold ${REVIEW_BADGE[post.clientReviewStatus || 'Pending'] || REVIEW_BADGE.Pending}`}>
-                      {post.clientReviewStatus || 'Pending'}
-                    </span>
-                  </div>
-
-                  <button
-                    type='button'
-                    onClick={() => setSelectedPost(post)}
-                    className='w-full text-left border border-gray-100 rounded-lg overflow-hidden bg-gray-50 hover:border-indigo-300'
-                  >
-                    {preview ? renderMedia(preview) : (
-                      <div className='w-full h-48 flex items-center justify-center bg-gray-100 text-gray-500 text-sm'>
-                        No preview
-                      </div>
-                    )}
-                    <div className='p-3'>
-                      <p className='text-sm text-gray-700 line-clamp-2'>
-                        {post.description || post.subject || 'Open to view post details'}
-                      </p>
-                    </div>
-                  </button>
-
-                  {viewMode === 'list' && (
-                    <div className='mt-3 border border-gray-100 rounded-lg p-3 bg-gray-50'>
-                      {renderDescription(post)}
-                    </div>
-                  )}
-
-                  <div className='mt-3'>
-                    <textarea
-                      value={noteDraft}
-                      onChange={(e) => setNoteDraftByPost((s) => ({ ...s, [post._id]: e.target.value }))}
-                      rows={2}
-                      className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                      placeholder='Add note for changes or feedback...'
-                    />
+                viewMode === 'grid' ? (
+                  <div key={post._id} className='rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden'>
                     <button
                       type='button'
-                      onClick={() => updateReview(post._id, undefined, true)}
-                      disabled={!!savingByPost[post._id]}
-                      className='mt-2 px-3 py-1.5 rounded border border-indigo-600 text-indigo-700 text-xs font-medium hover:bg-indigo-50 disabled:opacity-50'
+                      onClick={() => setSelectedPost(post)}
+                      className='group relative aspect-square w-full overflow-hidden bg-black text-left hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500'
                     >
-                      {savingByPost[post._id] ? 'Saving...' : 'Save Note'}
+                      {preview ? (
+                        <div className='h-full w-full'>
+                          {renderMedia(preview, 'h-full w-full object-cover')}
+                        </div>
+                      ) : (
+                        <div className='h-full w-full flex items-center justify-center bg-gray-900 text-gray-300 text-sm'>
+                          No preview
+                        </div>
+                      )}
+                      <div className='pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-90' />
+                      <div className='absolute bottom-0 left-0 right-0 p-3'>
+                        <p className='text-sm font-semibold text-white line-clamp-1'>{post.title}</p>
+                        <p className='text-[11px] text-gray-200 line-clamp-1'>
+                          {post.platform} • {post.contentType || 'Post'}
+                        </p>
+                      </div>
+                      <span className={`absolute top-2 left-2 inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${REVIEW_BADGE[post.clientReviewStatus || 'Pending'] || REVIEW_BADGE.Pending}`}>
+                        {post.clientReviewStatus || 'Pending'}
+                      </span>
                     </button>
-                  </div>
-
-                  <div className='flex flex-wrap gap-2 mb-3'>
-                    <button type='button' onClick={() => updateReview(post._id, 'accept')} disabled={!!savingByPost[post._id]} className='px-3 py-1.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'>Accept</button>
-                    <button type='button' onClick={() => updateReview(post._id, 'reject')} disabled={!!savingByPost[post._id]} className='px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50'>Reject</button>
-                    <button type='button' onClick={() => updateReview(post._id, 'need_changes')} disabled={!!savingByPost[post._id]} className='px-3 py-1.5 rounded text-xs font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50'>Need Changes</button>
-                  </div>
-
-                  {Array.isArray(post.uploadedLinks) && post.uploadedLinks.length > 0 && (
-                    <div className='border-t border-gray-100 pt-3'>
-                      <p className='text-sm font-semibold text-gray-800'>Post is uploaded</p>
-                      <div className='mt-2 space-y-1'>
-                        {post.uploadedLinks.map((link, idx) => (
-                          <div key={`${link.url}-${idx}`} className='text-sm'>
-                            <span className='text-gray-500'>{link.platform || 'Platform'}: </span>
-                            <a href={link.url} target='_blank' rel='noopener noreferrer' className='text-indigo-600 hover:underline break-all'>
-                              {link.url}
-                            </a>
-                          </div>
-                        ))}
+                    <div className='p-2'>
+                      <textarea
+                        value={noteDraft}
+                        onChange={(e) => setNoteDraftByPost((s) => ({ ...s, [post._id]: e.target.value }))}
+                        rows={2}
+                        className='w-full border border-gray-300 rounded px-2 py-1.5 text-[11px]'
+                        placeholder='Add comment for changes...'
+                      />
+                      <div className='mt-1.5 flex flex-nowrap gap-1 overflow-x-auto'>
+                        <button
+                          type='button'
+                          onClick={() => updateReview(post._id, undefined, true)}
+                          disabled={!!savingByPost[post._id]}
+                          className='px-2 py-1 rounded text-[11px] font-medium border border-indigo-600 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 whitespace-nowrap'
+                        >
+                          {savingByPost[post._id] ? 'Saving...' : 'Save Comment'}
+                        </button>
+                        <button type='button' onClick={() => updateReview(post._id, 'accept')} disabled={!!savingByPost[post._id]} className='px-2 py-1 rounded text-[11px] font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap'>Accept</button>
+                        <button type='button' onClick={() => updateReview(post._id, 'reject')} disabled={!!savingByPost[post._id]} className='px-2 py-1 rounded text-[11px] font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 whitespace-nowrap'>Reject</button>
+                        <button type='button' onClick={() => updateReview(post._id, 'need_changes')} disabled={!!savingByPost[post._id]} className='px-2 py-1 rounded text-[11px] font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 whitespace-nowrap'>Need Changes</button>
                       </div>
                     </div>
-                  )}
-                </div>
+                    <div className='px-2 pb-2'>
+                      <p className='text-[11px] text-gray-500'>
+                        Scheduled for: {post.scheduledTime ? new Date(post.scheduledTime).toLocaleDateString() : 'Not scheduled'}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div key={post._id} className='bg-white border border-gray-200 rounded-xl p-4 shadow-sm'>
+                    <div className='flex flex-wrap items-start justify-between gap-3 mb-3'>
+                      <p className='text-xs text-gray-600'>
+                        {post.platform} • {post.contentType || 'Post'} • {post.scheduledTime ? new Date(post.scheduledTime).toLocaleString() : 'No schedule'}
+                      </p>
+                      <span className={`inline-flex px-2 py-1 rounded text-xs font-semibold ${REVIEW_BADGE[post.clientReviewStatus || 'Pending'] || REVIEW_BADGE.Pending}`}>
+                        {post.clientReviewStatus || 'Pending'}
+                      </span>
+                    </div>
+
+                    <button
+                      type='button'
+                      onClick={() => setSelectedPost(post)}
+                      className='w-full text-left border border-gray-100 rounded-lg overflow-hidden bg-gray-50 hover:border-indigo-300'
+                    >
+                      {preview ? renderMedia(preview) : (
+                        <div className='w-full h-48 flex items-center justify-center bg-gray-100 text-gray-500 text-sm'>
+                          No preview
+                        </div>
+                      )}
+                    </button>
+
+                    <div className='mt-3'>
+                      <textarea
+                        value={noteDraft}
+                        onChange={(e) => setNoteDraftByPost((s) => ({ ...s, [post._id]: e.target.value }))}
+                        rows={2}
+                        className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                        placeholder='Add note for changes or feedback...'
+                      />
+                      <div className='mt-2 flex flex-nowrap gap-1.5 overflow-x-auto'>
+                        <button
+                          type='button'
+                          onClick={() => updateReview(post._id, undefined, true)}
+                          disabled={!!savingByPost[post._id]}
+                          className='px-3 py-1.5 rounded border border-indigo-600 text-indigo-700 text-xs font-medium hover:bg-indigo-50 disabled:opacity-50 whitespace-nowrap'
+                        >
+                          {savingByPost[post._id] ? 'Saving...' : 'Save Comment'}
+                        </button>
+                        <button type='button' onClick={() => updateReview(post._id, 'accept')} disabled={!!savingByPost[post._id]} className='px-3 py-1.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap'>Accept</button>
+                        <button type='button' onClick={() => updateReview(post._id, 'reject')} disabled={!!savingByPost[post._id]} className='px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 whitespace-nowrap'>Reject</button>
+                        <button type='button' onClick={() => updateReview(post._id, 'need_changes')} disabled={!!savingByPost[post._id]} className='px-3 py-1.5 rounded text-xs font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 whitespace-nowrap'>Need Changes</button>
+                      </div>
+                    </div>
+
+                    {Array.isArray(post.uploadedLinks) && post.uploadedLinks.length > 0 && (
+                      <div className='border-t border-gray-100 pt-3'>
+                        <p className='text-sm font-semibold text-gray-800'>Post is uploaded</p>
+                        <div className='mt-2 space-y-1'>
+                          {post.uploadedLinks.map((link, idx) => (
+                            <div key={`${link.url}-${idx}`} className='text-sm'>
+                              <span className='text-gray-500'>{link.platform || 'Platform'}: </span>
+                              <a href={link.url} target='_blank' rel='noopener noreferrer' className='text-indigo-600 hover:underline break-all'>
+                                {link.url}
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className='mt-3 pt-2 border-t border-gray-100'>
+                      <p className='text-xs text-gray-500'>
+                        Scheduled for: {post.scheduledTime ? new Date(post.scheduledTime).toLocaleDateString() : 'Not scheduled'}
+                      </p>
+                    </div>
+                  </div>
+                )
               )
             })
           )}

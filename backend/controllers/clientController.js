@@ -3,8 +3,15 @@ import Client from '../models/client.js';
 import Project from '../models/project.js';
 import Billing from '../models/billing.js';
 import Task from '../models/task.js';
+import SocialMediaCalendar from '../models/socialMediaCalendar.js';
 import { calculateBillingSummary } from '../utils/clientProfileSync.js';
 import { computeTracking, withDynamicRemainingCost } from './billingController.js';
+
+const socialStatusToTaskStatus = (status) => {
+  if (status === 'Published') return 'Completed';
+  if (status === 'Cancelled') return 'Cancelled';
+  return 'Pending'; // Scheduled, Draft
+};
 
 // Create a new client
 export const createClient = async (req, res) => {
@@ -136,6 +143,76 @@ export const getClientDashboard = async (req, res) => {
             .lean()
         : [];
 
+    let socialTasks = [];
+    const bt = String(client.businessType || '').toLowerCase();
+    const isMarketingClient = bt.includes('marketing') || bt.includes('social');
+    if (isMarketingClient) {
+      const socialCalendar = await SocialMediaCalendar.findOne({ client: clientId })
+        .populate('posts.assignedTo', 'name email');
+      if (socialCalendar && Array.isArray(socialCalendar.posts)) {
+        for (const post of socialCalendar.posts) {
+          const assignees = Array.isArray(post.assignedTo) ? post.assignedTo : [];
+          if (assignees.length === 0) {
+            socialTasks.push({
+              _id: `social-media-${socialCalendar._id}-${post._id}-unassigned`,
+              source: 'social_media',
+              title: post.title || 'Social media post',
+              description: post.description || post.subject || '',
+              project: { _id: 'social-media', projectName: 'Social Media' },
+              assignedTo: null,
+              assignedBy: { _id: 'social-calendar-system', name: 'Social Media Calendar' },
+              createdAt: post.createdAt || socialCalendar.createdAt || new Date(),
+              updatedAt: post.updatedAt || socialCalendar.updatedAt || new Date(),
+              status: socialStatusToTaskStatus(post.status),
+              priority: 'Medium',
+              dueDate: post.scheduledTime,
+              socialPostStatus: post.status || 'Scheduled',
+              platform: post.platform || '',
+              contentType: post.contentType || '',
+              referenceLink: post.referenceLink || '',
+              referenceUpload: post.referenceUpload || { fileName: '', mimeType: '', dataUrl: '' },
+              clientName: client.clientName || '',
+              clientId,
+              calendarId: socialCalendar._id,
+              postId: post._id,
+            });
+            continue;
+          }
+          for (const assignee of assignees) {
+            const aid = assignee?._id || assignee;
+            const aidStr = aid?.toString?.() || String(aid || '');
+            socialTasks.push({
+              _id: `social-media-${socialCalendar._id}-${post._id}-${aidStr || 'unassigned'}`,
+              source: 'social_media',
+              title: post.title || 'Social media post',
+              description: post.description || post.subject || '',
+              project: { _id: 'social-media', projectName: 'Social Media' },
+              assignedTo: typeof assignee === 'object' ? assignee : { _id: aid, name: '—' },
+              assignedBy: { _id: 'social-calendar-system', name: 'Social Media Calendar' },
+              createdAt: post.createdAt || socialCalendar.createdAt || new Date(),
+              updatedAt: post.updatedAt || socialCalendar.updatedAt || new Date(),
+              status: socialStatusToTaskStatus(post.status),
+              priority: 'Medium',
+              dueDate: post.scheduledTime,
+              socialPostStatus: post.status || 'Scheduled',
+              platform: post.platform || '',
+              contentType: post.contentType || '',
+              referenceLink: post.referenceLink || '',
+              referenceUpload: post.referenceUpload || { fileName: '', mimeType: '', dataUrl: '' },
+              clientName: client.clientName || '',
+              clientId,
+              calendarId: socialCalendar._id,
+              postId: post._id,
+            });
+          }
+        }
+      }
+    }
+
+    const mergedTasks = [...tasks, ...socialTasks].sort(
+      (a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
+    );
+
     const billingSummary = calculateBillingSummary(
       billingsRaw.map((b) => (b.toObject ? b.toObject() : { ...b }))
     );
@@ -163,7 +240,7 @@ export const getClientDashboard = async (req, res) => {
         id: p._id,
       });
     }
-    for (const t of tasks.slice(0, 50)) {
+    for (const t of mergedTasks.slice(0, 50)) {
       workHistory.push({
         type: 'task',
         at: t.updatedAt || t.createdAt,
@@ -179,7 +256,7 @@ export const getClientDashboard = async (req, res) => {
       billingSummary,
       projects: projectsPayload,
       billings,
-      tasks,
+      tasks: mergedTasks,
       workHistory: workHistory.slice(0, 50),
     });
   } catch (error) {

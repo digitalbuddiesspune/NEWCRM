@@ -52,12 +52,19 @@ const ClientDashboardView = () => {
     setTaskDetailLoading(false)
   }, [])
 
-  const openTaskModal = useCallback(async (taskId) => {
-    if (!taskId) return
+  const openTaskModal = useCallback(async (taskOrId) => {
+    if (!taskOrId) return
     setTaskModalOpen(true)
     setTaskDetailLoading(true)
     setTaskDetail(null)
     setTaskDetailError(null)
+    const fromList = typeof taskOrId === 'object' ? taskOrId : null
+    const taskId = fromList ? String(fromList._id || '') : String(taskOrId)
+    if (fromList?.source === 'social_media') {
+      setTaskDetail(fromList)
+      setTaskDetailLoading(false)
+      return
+    }
     try {
       const res = await api.get(`/tasks/${taskId}`)
       setTaskDetail(res.data)
@@ -323,11 +330,11 @@ const ClientDashboardView = () => {
                     key={t._id}
                     role='button'
                     tabIndex={0}
-                    onClick={() => openTaskModal(t._id)}
+                    onClick={() => openTaskModal(t)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        openTaskModal(t._id)
+                        openTaskModal(t)
                       }
                     }}
                     className='border-b border-gray-100 hover:bg-blue-50/60 cursor-pointer transition-colors'
