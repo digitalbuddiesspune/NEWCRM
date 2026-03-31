@@ -100,7 +100,7 @@ export const getCalendarByClient = async (req, res) => {
         posts: [],
         shareToken: generateShareToken(),
       });
-      await calendar.populate('client').populate('project');
+      await calendar.populate([{ path: 'client' }, { path: 'project' }]);
       await syncClientProfile({ clientId: filter.client });
     } else if (!calendar.shareToken) {
       calendar.shareToken = generateShareToken();
