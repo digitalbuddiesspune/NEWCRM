@@ -17,6 +17,15 @@ const normalizeProjectPayload = (body = {}) => {
   return normalized;
 };
 
+const extractId = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object') {
+    const raw = value._id ?? value.id;
+    return raw ? String(raw) : null;
+  }
+  return String(value);
+};
+
 const getProjectErrorMessage = (error, fallback) => {
   if (!error) return fallback;
   if (error.name === 'ValidationError') {
@@ -297,8 +306,10 @@ export const updateProject = async (req, res) => {
       .populate('projectManager')
       .populate('teamMembers');
     if (!updated) return res.status(404).json({ message: 'Project not found' });
-    if (previous?.client) await syncClientProfile({ clientId: previous.client, preferredProjectId: updated._id });
-    if (updated?.client) await syncClientProfile({ clientId: updated.client, preferredProjectId: updated._id });
+    const previousClientId = extractId(previous?.client);
+    const updatedClientId = extractId(updated?.client);
+    if (previousClientId) await syncClientProfile({ clientId: previousClientId, preferredProjectId: updated._id });
+    if (updatedClientId) await syncClientProfile({ clientId: updatedClientId, preferredProjectId: updated._id });
     res.status(200).json({ message: 'Project updated', project: updated });
   } catch (error) {
     console.error('updateProject failed:', error);

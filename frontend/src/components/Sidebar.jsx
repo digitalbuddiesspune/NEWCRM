@@ -114,12 +114,17 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
       <div className='px-3 py-4 border-b border-gray-800 flex items-center justify-center'>
         {isOpen ? (
           <div className='w-full flex items-center justify-between px-2'>
-            <div className='flex items-center gap-3 min-w-0'>
+            <button
+              type='button'
+              onClick={() => navigate('/admin-dashboard')}
+              className='flex cursor-pointer items-center gap-3 min-w-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400'
+              title='Go to Admin Dashboard'
+            >
               <div className='h-10 rounded-lg flex-shrink-0 overflow-hidden'>
-                <img src={Logo} alt="Digital Buddiess" className='w-full h-full object-cover' />
+                <img src={Logo} alt='Digital Buddiess' className='w-full h-full object-cover' />
               </div>
               {/* <p className='text-sm text-gray-400 truncate'>Gamotech Software</p> */}
-            </div>
+            </button>
             <button
               onClick={onToggle}
               className='p-2 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-colors flex-shrink-0'

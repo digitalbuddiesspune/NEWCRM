@@ -12,6 +12,11 @@ const socialMediaPostSchema = new mongoose.Schema({
   carouselItems: [{
     subject: { type: String, default: '' },
     description: { type: String, default: '' },
+    referenceUpload: {
+      fileName: { type: String, default: '' },
+      mimeType: { type: String, default: '' },
+      dataUrl: { type: String, default: '' },
+    },
   }],
   platform: {
     type: String,

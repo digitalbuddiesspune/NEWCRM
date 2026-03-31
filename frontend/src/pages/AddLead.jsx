@@ -134,6 +134,19 @@ const AddLead = ({ readOnly = false }) => {
 
   useEffect(() => {
     if (isEdit) return
+    const loggedInUserId = user?._id || user?.id || ''
+    if (!loggedInUserId) return
+    setForm((f) => ({
+      ...f,
+      generatedBy: f.generatedBy || loggedInUserId,
+    }))
+    if (user?.name) {
+      setEmployeeSearch((prev) => prev || user.name)
+    }
+  }, [isEdit, user?._id, user?.id, user?.name])
+
+  useEffect(() => {
+    if (isEdit) return
     const params = new URLSearchParams(location.search)
     const isMeeting = params.get('meeting') === '1'
     if (!isMeeting) return
@@ -146,6 +159,12 @@ const AddLead = ({ readOnly = false }) => {
       setEmployeeSearch(user.name)
     }
   }, [location.search, isEdit, user?._id, user?.name, employeeSearch])
+
+  useEffect(() => {
+    if (employeeSearch || !form.generatedBy || employees.length === 0) return
+    const matched = employees.find((e) => e?._id === form.generatedBy)
+    if (matched?.name) setEmployeeSearch(matched.name)
+  }, [employeeSearch, form.generatedBy, employees])
 
   useEffect(() => {
     if (!form.state || states.length === 0) return
@@ -203,21 +222,6 @@ const AddLead = ({ readOnly = false }) => {
     setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  const handleAddFollowUp = () => {
-    const trimmed = followUpComments.trim()
-    if (!trimmed || !followUpDate) return
-    setForm((f) => ({
-      ...f,
-      followUps: [...f.followUps, { date: followUpDate, comments: trimmed }],
-    }))
-    setFollowUpComments('')
-    setFollowUpDate(new Date().toISOString().slice(0, 10))
-  }
-
-  const handleRemoveFollowUp = (idx) => {
-    setForm((f) => ({ ...f, followUps: f.followUps.filter((_, i) => i !== idx) }))
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (readOnly) return
@@ -228,10 +232,16 @@ const AddLead = ({ readOnly = false }) => {
     setLoading(true)
     setError(null)
     try {
+      const pendingFollowUpComment = followUpComments.trim()
+      const pendingFollowUp =
+        pendingFollowUpComment && followUpDate
+          ? [{ date: followUpDate, comments: pendingFollowUpComment }]
+          : []
       const payload = {
         ...form,
+        meetingType: form.meetingType || undefined,
         meetingTime: form.meetingTime ? new Date(form.meetingTime) : undefined,
-        followUps: form.followUps.map((fu) => {
+        followUps: [...form.followUps, ...pendingFollowUp].map((fu) => {
           const piece = {
             comments: (fu.comments ?? fu.text ?? '').trim(),
             date:
@@ -447,16 +457,13 @@ const AddLead = ({ readOnly = false }) => {
                         <tr className='bg-blue-600 text-white'>
                           <th className='text-left px-4 py-3 font-semibold whitespace-nowrap'>Follow-up date</th>
                           <th className='text-left px-4 py-3 font-semibold'>Comments (what was discussed)</th>
-                          {!readOnly && (
-                            <th className='text-right px-4 py-3 font-semibold w-28 whitespace-nowrap'>Actions</th>
-                          )}
                         </tr>
                       </thead>
                       <tbody className='bg-white divide-y divide-gray-100'>
                         {form.followUps.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={readOnly ? 2 : 3}
+                              colSpan={2}
                               className='px-4 py-8 text-center text-gray-500'
                             >
                               {readOnly ? 'No follow-ups recorded.' : 'No follow-ups yet. Add one below.'}
@@ -471,17 +478,6 @@ const AddLead = ({ readOnly = false }) => {
                               <td className='px-4 py-3 text-gray-800 align-top whitespace-pre-wrap break-words'>
                                 {fu.comments ?? fu.text ?? '—'}
                               </td>
-                              {!readOnly && (
-                                <td className='px-4 py-3 text-right align-top'>
-                                  <button
-                                    type='button'
-                                    onClick={() => handleRemoveFollowUp(idx)}
-                                    className='text-red-600 hover:text-red-800 text-xs font-medium'
-                                  >
-                                    Remove
-                                  </button>
-                                </td>
-                              )}
                             </tr>
                           ))
                         )}
@@ -515,15 +511,6 @@ const AddLead = ({ readOnly = false }) => {
                             rows={2}
                             className={inputClass}
                           />
-                        </div>
-                        <div className='sm:col-span-2 flex sm:justify-end'>
-                          <button
-                            type='button'
-                            onClick={handleAddFollowUp}
-                            className='w-full sm:w-auto px-4 py-3 rounded-xl border border-gray-300 bg-white text-sm font-medium hover:bg-gray-100'
-                          >
-                            Add
-                          </button>
                         </div>
                       </div>
                     </div>

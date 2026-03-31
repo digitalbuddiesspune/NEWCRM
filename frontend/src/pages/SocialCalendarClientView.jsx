@@ -14,9 +14,10 @@ const SocialCalendarClientView = () => {
   const [calendar, setCalendar] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [activeTabByPost, setActiveTabByPost] = useState({})
   const [noteDraftByPost, setNoteDraftByPost] = useState({})
   const [savingByPost, setSavingByPost] = useState({})
+  const [viewMode, setViewMode] = useState('grid')
+  const [selectedPost, setSelectedPost] = useState(null)
 
   const fetchCalendar = async () => {
     if (!token) return
@@ -46,6 +47,20 @@ const SocialCalendarClientView = () => {
     () => [...(calendar?.posts || [])].sort((a, b) => new Date(a.scheduledTime || 0) - new Date(b.scheduledTime || 0)),
     [calendar?.posts]
   )
+
+  const feed30Days = useMemo(() => {
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const end = new Date(now)
+    end.setDate(now.getDate() + 30)
+    return sortedPosts.filter((p) => {
+      if (!p?.scheduledTime) return true
+      const d = new Date(p.scheduledTime)
+      return d >= now && d <= end
+    })
+  }, [sortedPosts])
+
+  const feedPosts = sortedPosts
 
   const updateReview = async (postId, action, onlyNote = false) => {
     const note = noteDraftByPost[postId] || ''
@@ -83,6 +98,91 @@ const SocialCalendarClientView = () => {
     )
   }
 
+  const isImageSrc = (src = '') => {
+    const s = String(src || '').toLowerCase()
+    return s.startsWith('data:image/') || /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/.test(s)
+  }
+
+  const isVideoSrc = (src = '') => {
+    const s = String(src || '').toLowerCase()
+    return s.startsWith('data:video/') || /\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/.test(s) || s.includes('youtube.com') || s.includes('youtu.be') || s.includes('vimeo.com') || s.includes('instagram.com/reel/') || s.includes('instagram.com/p/')
+  }
+
+  const toEmbedUrl = (src = '') => {
+    const s = String(src || '')
+    if (!s) return ''
+    if (s.includes('youtube.com/watch')) {
+      const url = new URL(s)
+      const v = url.searchParams.get('v')
+      return v ? `https://www.youtube.com/embed/${v}` : s
+    }
+    if (s.includes('youtu.be/')) {
+      const id = s.split('youtu.be/')[1]?.split(/[?&]/)[0]
+      return id ? `https://www.youtube.com/embed/${id}` : s
+    }
+    if (s.includes('vimeo.com/')) {
+      const id = s.split('vimeo.com/')[1]?.split(/[?&]/)[0]
+      return id ? `https://player.vimeo.com/video/${id}` : s
+    }
+    if (s.includes('instagram.com/reel/')) {
+      const id = s.split('instagram.com/reel/')[1]?.split(/[/?#&]/)[0]
+      return id ? `https://www.instagram.com/reel/${id}/embed` : s
+    }
+    if (s.includes('instagram.com/p/')) {
+      const id = s.split('instagram.com/p/')[1]?.split(/[/?#&]/)[0]
+      return id ? `https://www.instagram.com/p/${id}/embed` : s
+    }
+    return s
+  }
+
+  const mediaCandidates = (post) => {
+    const arr = []
+    if (post?.referenceUpload?.dataUrl) arr.push(post.referenceUpload.dataUrl)
+    if (post?.referenceLink) arr.push(post.referenceLink)
+    if (Array.isArray(post?.uploadedLinks)) {
+      post.uploadedLinks.forEach((l) => l?.url && arr.push(l.url))
+    }
+    return arr.filter(Boolean)
+  }
+
+  const canRenderMedia = (src) => isImageSrc(src) || isVideoSrc(src)
+
+  const renderMedia = (src, className = 'w-full h-48 object-cover') => {
+    if (!src) return null
+    if (isImageSrc(src)) {
+      return <img src={src} alt='Post media' className={className} />
+    }
+    if (isVideoSrc(src)) {
+      const embedSrc = toEmbedUrl(src)
+      if (/\.((mp4|webm|ogg|mov|m4v))(\?.*)?$/i.test(embedSrc) || embedSrc.startsWith('data:video/')) {
+        return (
+          <video className='w-full h-48 rounded border border-gray-200 bg-black' controls src={embedSrc}>
+            Your browser does not support video playback.
+          </video>
+        )
+      }
+      return (
+        <iframe
+          src={embedSrc}
+          title='Post video'
+          className='w-full h-48 rounded border border-gray-200'
+          allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+          allowFullScreen
+        />
+      )
+    }
+    return null
+  }
+
+  const postPreviewImage = (post) => {
+    if (post?.referenceUpload?.dataUrl) return post.referenceUpload.dataUrl
+    if (post?.contentType === 'Carousel' && Array.isArray(post.carouselItems)) {
+      const withUpload = post.carouselItems.find((s) => s?.referenceUpload?.dataUrl)
+      if (withUpload?.referenceUpload?.dataUrl) return withUpload.referenceUpload.dataUrl
+    }
+    return ''
+  }
+
   if (loading) return <div className='p-6 text-sm text-gray-600'>Loading shared calendar...</div>
   if (error) return <div className='p-6 text-sm text-red-600'>{error}</div>
   if (!calendar) return <div className='p-6 text-sm text-gray-600'>Calendar not found.</div>
@@ -91,21 +191,37 @@ const SocialCalendarClientView = () => {
     <div className='min-h-screen bg-gray-50 p-4 md:p-6'>
       <div className='max-w-5xl mx-auto'>
         <div className='mb-5'>
-          <h1 className='text-2xl font-bold text-gray-900'>Client Social Media Review</h1>
+          <h1 className='text-2xl font-bold text-gray-900'>Client Social Feed</h1>
           <p className='text-sm text-gray-600 mt-1'>
             Client: <span className='font-medium'>{calendar.client?.clientName || '—'}</span>
           </p>
+          <div className='mt-3 inline-flex rounded-lg border border-gray-200 p-1 bg-white'>
+            <button
+              type='button'
+              onClick={() => setViewMode('grid')}
+              className={`px-3 py-1.5 text-xs rounded ${viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+            >
+              3 Grid
+            </button>
+            <button
+              type='button'
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 text-xs rounded ${viewMode === 'list' ? 'bg-indigo-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+            >
+              1 Column
+            </button>
+          </div>
         </div>
 
-        <div className='space-y-4'>
-          {sortedPosts.length === 0 ? (
+        <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-4'}>
+          {feedPosts.length === 0 ? (
             <div className='bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-600'>
               No social posts available.
             </div>
           ) : (
-            sortedPosts.map((post) => {
-              const activeTab = activeTabByPost[post._id] || 'reference'
+            feedPosts.map((post) => {
               const noteDraft = noteDraftByPost[post._id] || ''
+              const preview = [...mediaCandidates(post), postPreviewImage(post)].find((src) => canRenderMedia(src))
               return (
                 <div key={post._id} className='bg-white border border-gray-200 rounded-xl p-4 shadow-sm'>
                   <div className='flex flex-wrap items-start justify-between gap-3 mb-3'>
@@ -120,48 +236,45 @@ const SocialCalendarClientView = () => {
                     </span>
                   </div>
 
-                  <div className='flex flex-wrap gap-2 mb-3'>
-                    <button type='button' onClick={() => setActiveTabByPost((s) => ({ ...s, [post._id]: 'reference' }))} className={`px-3 py-1.5 rounded text-xs font-medium border ${activeTab === 'reference' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300 text-gray-700'}`}>Reference</button>
-                    <button type='button' onClick={() => setActiveTabByPost((s) => ({ ...s, [post._id]: 'description' }))} className={`px-3 py-1.5 rounded text-xs font-medium border ${activeTab === 'description' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300 text-gray-700'}`}>Description of Post</button>
-                    <button type='button' onClick={() => setActiveTabByPost((s) => ({ ...s, [post._id]: 'note' }))} className={`px-3 py-1.5 rounded text-xs font-medium border ${activeTab === 'note' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300 text-gray-700'}`}>Add Note</button>
-                  </div>
+                  <button
+                    type='button'
+                    onClick={() => setSelectedPost(post)}
+                    className='w-full text-left border border-gray-100 rounded-lg overflow-hidden bg-gray-50 hover:border-indigo-300'
+                  >
+                    {preview ? renderMedia(preview) : (
+                      <div className='w-full h-48 flex items-center justify-center bg-gray-100 text-gray-500 text-sm'>
+                        No preview
+                      </div>
+                    )}
+                    <div className='p-3'>
+                      <p className='text-sm text-gray-700 line-clamp-2'>
+                        {post.description || post.subject || 'Open to view post details'}
+                      </p>
+                    </div>
+                  </button>
 
-                  <div className='border border-gray-100 rounded-lg p-3 bg-gray-50 mb-3'>
-                    {activeTab === 'reference' && (
-                      <div>
-                        {post.referenceLink ? (
-                          <a href={post.referenceLink} target='_blank' rel='noopener noreferrer' className='text-sm text-indigo-600 hover:underline break-all'>
-                            {post.referenceLink}
-                          </a>
-                        ) : post.referenceUpload?.dataUrl ? (
-                          <a href={post.referenceUpload.dataUrl} target='_blank' rel='noopener noreferrer' className='text-sm text-indigo-600 hover:underline break-all'>
-                            {post.referenceUpload.fileName || 'Open uploaded reference'}
-                          </a>
-                        ) : (
-                          <p className='text-sm text-gray-500'>No reference shared.</p>
-                        )}
-                      </div>
-                    )}
-                    {activeTab === 'description' && renderDescription(post)}
-                    {activeTab === 'note' && (
-                      <div>
-                        <textarea
-                          value={noteDraft}
-                          onChange={(e) => setNoteDraftByPost((s) => ({ ...s, [post._id]: e.target.value }))}
-                          rows={3}
-                          className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                          placeholder='Add note for changes or feedback...'
-                        />
-                        <button
-                          type='button'
-                          onClick={() => updateReview(post._id, undefined, true)}
-                          disabled={!!savingByPost[post._id]}
-                          className='mt-2 px-3 py-1.5 rounded border border-indigo-600 text-indigo-700 text-xs font-medium hover:bg-indigo-50 disabled:opacity-50'
-                        >
-                          {savingByPost[post._id] ? 'Saving...' : 'Save Note'}
-                        </button>
-                      </div>
-                    )}
+                  {viewMode === 'list' && (
+                    <div className='mt-3 border border-gray-100 rounded-lg p-3 bg-gray-50'>
+                      {renderDescription(post)}
+                    </div>
+                  )}
+
+                  <div className='mt-3'>
+                    <textarea
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraftByPost((s) => ({ ...s, [post._id]: e.target.value }))}
+                      rows={2}
+                      className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                      placeholder='Add note for changes or feedback...'
+                    />
+                    <button
+                      type='button'
+                      onClick={() => updateReview(post._id, undefined, true)}
+                      disabled={!!savingByPost[post._id]}
+                      className='mt-2 px-3 py-1.5 rounded border border-indigo-600 text-indigo-700 text-xs font-medium hover:bg-indigo-50 disabled:opacity-50'
+                    >
+                      {savingByPost[post._id] ? 'Saving...' : 'Save Note'}
+                    </button>
                   </div>
 
                   <div className='flex flex-wrap gap-2 mb-3'>
@@ -190,6 +303,50 @@ const SocialCalendarClientView = () => {
             })
           )}
         </div>
+
+        {selectedPost && (
+          <div className='fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center' onClick={() => setSelectedPost(null)}>
+            <div className='bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-5' onClick={(e) => e.stopPropagation()}>
+              <div className='flex items-start justify-between gap-3'>
+                <div>
+                  <h3 className='text-lg font-bold text-gray-900'>{selectedPost.title}</h3>
+                  <p className='text-xs text-gray-600 mt-0.5'>
+                    {selectedPost.platform} • {selectedPost.contentType || 'Post'} • {selectedPost.scheduledTime ? new Date(selectedPost.scheduledTime).toLocaleString() : 'No schedule'}
+                  </p>
+                </div>
+                <button type='button' onClick={() => setSelectedPost(null)} className='text-gray-500 hover:text-gray-700'>Close</button>
+              </div>
+              <div className='mt-4'>
+                {[...mediaCandidates(selectedPost), postPreviewImage(selectedPost)].find((src) => canRenderMedia(src)) ? (
+                  <div className='rounded-lg overflow-hidden border border-gray-200'>
+                    {renderMedia(
+                      [...mediaCandidates(selectedPost), postPreviewImage(selectedPost)].find((src) => canRenderMedia(src)),
+                      'w-full max-h-[380px] object-cover'
+                    )}
+                  </div>
+                ) : (
+                  <div className='w-full h-64 rounded-lg border border-gray-200 bg-gray-100 flex items-center justify-center text-gray-500 text-sm'>No preview</div>
+                )}
+              </div>
+              <div className='mt-4'>
+                {renderDescription(selectedPost)}
+              </div>
+              <div className='mt-4 text-sm'>
+                {selectedPost.referenceLink ? (
+                  <a href={selectedPost.referenceLink} target='_blank' rel='noopener noreferrer' className='text-indigo-600 hover:underline break-all'>
+                    {selectedPost.referenceLink}
+                  </a>
+                ) : selectedPost.referenceUpload?.dataUrl ? (
+                  <a href={selectedPost.referenceUpload.dataUrl} target='_blank' rel='noopener noreferrer' className='text-indigo-600 hover:underline break-all'>
+                    {selectedPost.referenceUpload.fileName || 'Open uploaded reference'}
+                  </a>
+                ) : (
+                  <p className='text-gray-500'>No reference shared.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -24,6 +24,18 @@ const PLATFORM_ACCENT = {
   YouTube: 'from-red-500 to-red-600',
   Other: 'from-violet-500 to-purple-600',
 }
+const SLIDE_LABELS = ['Slide 1', 'Slide 2', 'Slide 3']
+const DEFAULT_REFERENCE_UPLOAD = { fileName: '', mimeType: '', dataUrl: '' }
+const createEmptyCarouselSlide = () => ({ subject: '', description: '', referenceUpload: { ...DEFAULT_REFERENCE_UPLOAD } })
+const ensureThreeCarouselSlides = (items = []) => {
+  const normalized = Array.isArray(items) ? items.slice(0, 3) : []
+  while (normalized.length < 3) normalized.push(createEmptyCarouselSlide())
+  return normalized.map((slide) => ({
+    subject: slide?.subject || '',
+    description: slide?.description || '',
+    referenceUpload: slide?.referenceUpload || { ...DEFAULT_REFERENCE_UPLOAD },
+  }))
+}
 
 /** Normalize employee id for compares and API (avoid ObjectId vs string mismatches). */
 const assigneeIdKey = (raw) => {
@@ -40,6 +52,7 @@ const SocialCalendarView = () => {
   const [clientOpen, setClientOpen] = useState(false)
   const [calendar, setCalendar] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [savingPost, setSavingPost] = useState(false)
   const [error, setError] = useState(null)
   const [showAddPost, setShowAddPost] = useState(false)
   const [editingPost, setEditingPost] = useState(null)
@@ -48,7 +61,7 @@ const SocialCalendarView = () => {
     contentType: 'Feed Post',
     subject: '',
     description: '',
-    carouselItems: [{ subject: '', description: '' }],
+    carouselItems: ensureThreeCarouselSlides(),
     platform: 'Instagram',
     scheduledTime: '',
     status: 'Scheduled',
@@ -64,6 +77,7 @@ const SocialCalendarView = () => {
   const [calendarYear, setCalendarYear] = useState(now.getFullYear())
   const clientRef = useRef(null)
   const assigneeRef = useRef(null)
+  const shareLink = calendar?.shareToken ? `${window.location.origin}/social-calendar/client/${calendar.shareToken}` : ''
 
   const fetchClients = async () => {
     try {
@@ -150,6 +164,7 @@ const SocialCalendarView = () => {
   const handleAddPost = async (e) => {
     e.preventDefault()
     if (!selectedClient || !postForm.title.trim()) return
+    setSavingPost(true)
     try {
       const res = await api.post(`/social-calendars/client/${selectedClient._id}/posts`, {
         ...postForm,
@@ -165,7 +180,7 @@ const SocialCalendarView = () => {
         contentType: 'Feed Post',
         subject: '',
         description: '',
-        carouselItems: [{ subject: '', description: '' }],
+        carouselItems: ensureThreeCarouselSlides(),
         platform: 'Instagram',
         scheduledTime: '',
         status: 'Scheduled',
@@ -176,6 +191,8 @@ const SocialCalendarView = () => {
       setShowAddPost(false)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error adding post')
+    } finally {
+      setSavingPost(false)
     }
   }
 
@@ -189,9 +206,7 @@ const SocialCalendarView = () => {
       contentType: post.contentType || 'Feed Post',
       subject: post.subject || '',
       description: post.description || '',
-      carouselItems: Array.isArray(post.carouselItems) && post.carouselItems.length > 0
-        ? post.carouselItems
-        : [{ subject: '', description: '' }],
+      carouselItems: ensureThreeCarouselSlides(post.carouselItems),
       platform: post.platform || 'Instagram',
       scheduledTime,
       status: post.status || 'Scheduled',
@@ -208,6 +223,7 @@ const SocialCalendarView = () => {
   const handleUpdatePost = async (e) => {
     e.preventDefault()
     if (!selectedClient || !editingPost || !postForm.title.trim()) return
+    setSavingPost(true)
     try {
       const res = await api.put(
         `/social-calendars/client/${selectedClient._id}/posts/${editingPost._id}`,
@@ -226,7 +242,7 @@ const SocialCalendarView = () => {
         contentType: 'Feed Post',
         subject: '',
         description: '',
-        carouselItems: [{ subject: '', description: '' }],
+        carouselItems: ensureThreeCarouselSlides(),
         platform: 'Instagram',
         scheduledTime: '',
         status: 'Scheduled',
@@ -236,6 +252,8 @@ const SocialCalendarView = () => {
       })
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error updating post')
+    } finally {
+      setSavingPost(false)
     }
   }
 
@@ -249,7 +267,7 @@ const SocialCalendarView = () => {
       contentType: 'Feed Post',
       subject: '',
       description: '',
-      carouselItems: [{ subject: '', description: '' }],
+      carouselItems: ensureThreeCarouselSlides(),
       platform: 'Instagram',
       scheduledTime: '',
       status: 'Scheduled',
@@ -387,7 +405,7 @@ const SocialCalendarView = () => {
       contentType: 'Feed Post',
       subject: '',
       description: '',
-      carouselItems: [{ subject: '', description: '' }],
+      carouselItems: ensureThreeCarouselSlides(),
       platform: 'Instagram',
       scheduledTime,
       status: 'Scheduled',
@@ -411,6 +429,30 @@ const SocialCalendarView = () => {
           mimeType: file.type || '',
           dataUrl: typeof reader.result === 'string' ? reader.result : '',
         },
+      }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleCarouselReferenceUpload = (index, event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setPostForm((f) => ({
+        ...f,
+        carouselItems: ensureThreeCarouselSlides(f.carouselItems).map((slide, idx) =>
+          idx === index
+            ? {
+                ...slide,
+                referenceUpload: {
+                  fileName: file.name,
+                  mimeType: file.type || '',
+                  dataUrl: typeof reader.result === 'string' ? reader.result : '',
+                },
+              }
+            : slide
+        ),
       }))
     }
     reader.readAsDataURL(file)
@@ -577,6 +619,31 @@ const SocialCalendarView = () => {
                       </svg>
                       New post
                     </button>
+                  )}
+                  {shareLink && (
+                    <>
+                      <button
+                        type='button'
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(shareLink)
+                          } catch (err) {
+                            console.error('Copy failed:', err)
+                          }
+                        }}
+                        className='inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100'
+                      >
+                        Copy Client Feed Link
+                      </button>
+                      <a
+                        href={shareLink}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        className='inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50'
+                      >
+                        Open Feed
+                      </a>
+                    </>
                   )}
                 </div>
               </div>
@@ -841,7 +908,13 @@ const SocialCalendarView = () => {
                 <label className='block text-sm font-medium text-gray-700 mb-1'>Post Type</label>
                 <select
                   value={postForm.contentType}
-                  onChange={(e) => setPostForm((f) => ({ ...f, contentType: e.target.value }))}
+                  onChange={(e) =>
+                    setPostForm((f) => ({
+                      ...f,
+                      contentType: e.target.value,
+                      carouselItems: e.target.value === 'Carousel' ? ensureThreeCarouselSlides(f.carouselItems) : f.carouselItems,
+                    }))
+                  }
                   className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
                 >
                   {CONTENT_TYPES.map((type) => (
@@ -878,43 +951,15 @@ const SocialCalendarView = () => {
               {postForm.contentType === 'Carousel' ? (
                 <div className='col-span-4 space-y-3'>
                   <div className='grid grid-cols-4 gap-4 items-end'>
-                    <div className='col-span-3'>
+                    <div className='col-span-4'>
                       <label className='block text-sm font-medium text-gray-700 mb-1'>Carousel Slides</label>
-                      <p className='text-xs text-gray-500'>Add each slide as subject + description.</p>
-                    </div>
-                    <div className='col-span-1 flex justify-end pb-0.5'>
-                      <button
-                        type='button'
-                        onClick={() =>
-                          setPostForm((f) => ({
-                            ...f,
-                            carouselItems: [...(f.carouselItems || []), { subject: '', description: '' }],
-                          }))
-                        }
-                        className='text-xs px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 w-full sm:w-auto whitespace-nowrap'
-                      >
-                        + Add Slide
-                      </button>
+                      <p className='text-xs text-gray-500'>Slide 1, Slide 2 and Slide 3 each have their own upload reference.</p>
                     </div>
                   </div>
-                  {(postForm.carouselItems || []).map((item, index) => (
+                  {ensureThreeCarouselSlides(postForm.carouselItems).map((item, index) => (
                     <div key={index} className='border border-gray-200 rounded-lg p-3 grid grid-cols-4 gap-4'>
                       <div className='col-span-4 flex items-center justify-between gap-2'>
-                        <p className='text-xs font-semibold text-gray-600'>Slide {index + 1}</p>
-                        {(postForm.carouselItems || []).length > 1 && (
-                          <button
-                            type='button'
-                            onClick={() =>
-                              setPostForm((f) => ({
-                                ...f,
-                                carouselItems: f.carouselItems.filter((_, idx) => idx !== index),
-                              }))
-                            }
-                            className='text-xs text-red-600 hover:text-red-700 shrink-0'
-                          >
-                            Remove
-                          </button>
-                        )}
+                        <p className='text-xs font-semibold text-gray-600'>{SLIDE_LABELS[index] || `Slide ${index + 1}`}</p>
                       </div>
                       <div className='col-span-2'>
                         <label className='block text-xs font-medium text-gray-600 mb-1'>Subject</label>
@@ -945,10 +990,23 @@ const SocialCalendarView = () => {
                               ),
                             }))
                           }
-                          rows={2}
+                          rows={1}
                           placeholder='Description'
+                          className='w-full h-[42px] border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y'
+                        />
+                      </div>
+                      <div className='col-span-4'>
+                        <label className='block text-xs font-medium text-gray-600 mb-1'>
+                          Upload Reference ({SLIDE_LABELS[index] || `Slide ${index + 1}`})
+                        </label>
+                        <input
+                          type='file'
+                          onChange={(e) => handleCarouselReferenceUpload(index, e)}
                           className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
                         />
+                        {item.referenceUpload?.fileName && (
+                          <p className='text-xs text-gray-500 mt-1 truncate'>{item.referenceUpload.fileName}</p>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -970,8 +1028,8 @@ const SocialCalendarView = () => {
                     <textarea
                       value={postForm.description}
                       onChange={(e) => setPostForm((f) => ({ ...f, description: e.target.value }))}
-                      rows={3}
-                      className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                      rows={1}
+                      className='w-full h-[42px] border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y'
                       placeholder='Post content...'
                     />
                   </div>
@@ -998,18 +1056,20 @@ const SocialCalendarView = () => {
                 />
               </div>
 
-              <div className='col-span-1'>
-                <label className='block text-sm font-medium text-gray-700 mb-1'>Upload Reference <span className='text-gray-400 font-normal'>(optional)</span></label>
-                <input
-                  type='file'
-                  onChange={handleReferenceUpload}
-                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
-                />
-                {postForm.referenceUpload?.fileName && (
-                  <p className='text-xs text-gray-500 mt-1 truncate'>{postForm.referenceUpload.fileName}</p>
-                )}
-              </div>
-              <div className='col-span-3' ref={assigneeRef}>
+              {postForm.contentType !== 'Carousel' && (
+                <div className='col-span-1'>
+                  <label className='block text-sm font-medium text-gray-700 mb-1'>Upload Reference <span className='text-gray-400 font-normal'>(optional)</span></label>
+                  <input
+                    type='file'
+                    onChange={handleReferenceUpload}
+                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
+                  />
+                  {postForm.referenceUpload?.fileName && (
+                    <p className='text-xs text-gray-500 mt-1 truncate'>{postForm.referenceUpload.fileName}</p>
+                  )}
+                </div>
+              )}
+              <div className={postForm.contentType === 'Carousel' ? 'col-span-4' : 'col-span-3'} ref={assigneeRef}>
                 <label className='block text-sm font-medium text-gray-700 mb-1'>Assign To <span className='text-gray-400 font-normal'>(optional, multiple)</span></label>
                 <div className='relative'>
                   <input
@@ -1082,14 +1142,16 @@ const SocialCalendarView = () => {
               <div className='col-span-4 flex gap-3 pt-2 border-t border-gray-100 mt-1'>
                 <button
                   type='submit'
-                  className='flex-1 bg-cyan-600 hover:bg-cyan-700 text-white py-2 rounded-lg text-sm font-medium'
+                  disabled={savingPost}
+                  className='flex-1 bg-cyan-600 hover:bg-cyan-700 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed'
                 >
-                  {editingPost ? 'Update Post' : 'Add Post'}
+                  {savingPost ? 'Saving...' : editingPost ? 'Update Post' : 'Add Post'}
                 </button>
                 <button
                   type='button'
                   onClick={closePostModal}
-                  className='px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50'
+                  disabled={savingPost}
+                  className='px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed'
                 >
                   Cancel
                 </button>

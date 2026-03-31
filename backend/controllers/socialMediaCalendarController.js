@@ -24,8 +24,14 @@ const normalizeCarouselItems = (items) => {
     .map((item) => ({
       subject: typeof item?.subject === 'string' ? item.subject : '',
       description: typeof item?.description === 'string' ? item.description : '',
+      referenceUpload: normalizeReferenceUpload(item?.referenceUpload),
     }))
-    .filter((item) => item.subject.trim() || item.description.trim());
+    .filter((item) =>
+      item.subject.trim() ||
+      item.description.trim() ||
+      item.referenceUpload?.fileName ||
+      item.referenceUpload?.dataUrl
+    );
 };
 
 const normalizeReferenceUpload = (upload) => {

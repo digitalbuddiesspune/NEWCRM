@@ -34,6 +34,16 @@ const AddProject = () => {
   const managerRef = useRef(null)
 
   const navigate = useNavigate()
+  const toId = (val) => {
+    if (!val) return ''
+    if (typeof val === 'object') {
+      if (val._id || val.id) return toId(val._id || val.id)
+      if (typeof val.toHexString === 'function') return val.toHexString()
+      const asString = typeof val.toString === 'function' ? val.toString() : String(val)
+      return asString === '[object Object]' ? '' : asString
+    }
+    return String(val)
+  }
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -64,11 +74,11 @@ const AddProject = () => {
       try {
         const res = await api.get(`/projects/${id}`)
         const p = res.data
-        const clientId = p.client?._id ?? p.client
+        const clientId = toId(p.client?._id ?? p.client)
         const clientName = p.client?.clientName ?? ''
-        const managerId = p.projectManager?._id ?? p.projectManager
+        const managerId = toId(p.projectManager?._id ?? p.projectManager)
         const managerName = p.projectManager?.name ?? ''
-        const teamIds = (p.teamMembers || []).map((t) => (typeof t === 'object' ? t._id : t))
+        const teamIds = (p.teamMembers || []).map((t) => toId(typeof t === 'object' ? t._id ?? t : t)).filter(Boolean)
         setForm({
           projectName: p.projectName ?? '',
           department: p.department ?? 'IT',
@@ -153,10 +163,11 @@ const AddProject = () => {
       const toNullableDate = (value) => (value ? value : null)
       const payload = {
         ...form,
+        client: toId(form.client) || null,
         budget: form.budget === '' ? undefined : Number(form.budget),
         progress: form.progress === '' ? 0 : Number(form.progress),
-        projectManager: form.projectManager || null,
-        teamMembers: Array.isArray(form.teamMembers) ? form.teamMembers.filter(Boolean) : [],
+        projectManager: toId(form.projectManager) || null,
+        teamMembers: Array.isArray(form.teamMembers) ? form.teamMembers.map(toId).filter(Boolean) : [],
         endDate: toNullableDate(form.endDate),
         deadline: toNullableDate(form.deadline),
       }

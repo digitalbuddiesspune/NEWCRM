@@ -29,6 +29,19 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
       : x.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
+  const isImageUpload = (upload) => {
+    const mime = (upload?.mimeType || '').toLowerCase()
+    const name = (upload?.fileName || '').toLowerCase()
+    return mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(name)
+  }
+
+  const getPlatformSpecificReferenceLinks = (taskVal) => {
+    const selected = (taskVal?.platform || '').toLowerCase()
+    const links = Array.isArray(taskVal?.uploadedLinks) ? taskVal.uploadedLinks : []
+    if (!selected) return links
+    return links.filter((l) => (l?.platform || '').toLowerCase() === selected)
+  }
+
   const getPriorityColor = (priority) => {
     switch (priority) {
       case 'Urgent': return 'bg-red-100 text-red-800'
@@ -234,6 +247,24 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
             {task.source === 'social_media' && (
               <>
                 <div className='py-2 border-b border-gray-100'>
+                  <span className='text-sm text-gray-500'>Post Type</span>
+                  <p className='text-sm font-medium text-gray-900 mt-1'>{task.contentType || '—'}</p>
+                </div>
+                <div className='py-2 border-b border-gray-100'>
+                  <span className='text-sm text-gray-500'>Platform</span>
+                  <p className='text-sm font-medium text-gray-900 mt-1'>{task.platform || '—'}</p>
+                </div>
+                <div className='py-2 border-b border-gray-100'>
+                  <span className='text-sm text-gray-500'>Post Status</span>
+                  <p className='text-sm font-medium text-gray-900 mt-1'>{task.socialPostStatus || 'Scheduled'}</p>
+                </div>
+                <div className='py-2 border-b border-gray-100'>
+                  <span className='text-sm text-gray-500'>Post Description</span>
+                  <p className='text-sm font-medium text-gray-900 mt-1 whitespace-pre-wrap'>
+                    {task.description || 'No description'}
+                  </p>
+                </div>
+                <div className='py-2 border-b border-gray-100'>
                   <span className='text-sm text-gray-500'>Reference</span>
                   <div className='mt-1'>
                     {task.referenceLink ? (
@@ -247,8 +278,47 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
                     ) : (
                       <p className='text-sm text-gray-500'>No reference shared</p>
                     )}
+                    {task.referenceUpload?.dataUrl && isImageUpload(task.referenceUpload) && (
+                      <a href={task.referenceUpload.dataUrl} target='_blank' rel='noopener noreferrer'>
+                        <img
+                          src={task.referenceUpload.dataUrl}
+                          alt={task.referenceUpload.fileName || 'Reference preview'}
+                          className='mt-2 max-h-28 rounded border border-gray-200 object-cover'
+                        />
+                      </a>
+                    )}
                   </div>
                 </div>
+                {task.contentType === 'Carousel' && Array.isArray(task.carouselItems) && task.carouselItems.length > 0 && (
+                  <div className='py-2 border-b border-gray-100'>
+                    <span className='text-sm text-gray-500'>Carousel Slide References</span>
+                    <div className='mt-2 space-y-2'>
+                      {task.carouselItems.map((slide, idx) => (
+                        <div key={`slide-ref-${idx}`} className='rounded border border-gray-200 p-2'>
+                          <p className='text-xs font-semibold text-gray-600'>Slide {idx + 1}</p>
+                          {slide?.referenceUpload?.dataUrl ? (
+                            <div className='mt-1'>
+                              <a href={slide.referenceUpload.dataUrl} target='_blank' rel='noopener noreferrer' className='text-xs text-indigo-600 hover:underline break-all'>
+                                {slide.referenceUpload.fileName || `Slide ${idx + 1} reference`}
+                              </a>
+                              {isImageUpload(slide.referenceUpload) && (
+                                <a href={slide.referenceUpload.dataUrl} target='_blank' rel='noopener noreferrer'>
+                                  <img
+                                    src={slide.referenceUpload.dataUrl}
+                                    alt={slide.referenceUpload.fileName || `Slide ${idx + 1}`}
+                                    className='mt-1 max-h-24 rounded border border-gray-200 object-cover'
+                                  />
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <p className='text-xs text-gray-500 mt-1'>No reference upload</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className='py-2 border-b border-gray-100'>
                   <span className='text-sm text-gray-500'>Client Note</span>
                   <p className='text-sm font-medium text-gray-900 mt-1 whitespace-pre-wrap'>
@@ -257,9 +327,9 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
                 </div>
                 <div className='py-2 border-b border-gray-100'>
                   <span className='text-sm text-gray-500'>Uploaded Post Links</span>
-                  {Array.isArray(task.uploadedLinks) && task.uploadedLinks.length > 0 ? (
+                  {getPlatformSpecificReferenceLinks(task).length > 0 ? (
                     <div className='mt-2 space-y-1.5'>
-                      {task.uploadedLinks.map((link, idx) => (
+                      {getPlatformSpecificReferenceLinks(task).map((link, idx) => (
                         <div key={`${link.url}-${idx}`} className='text-sm'>
                           <span className='text-gray-500'>{link.platform || 'Platform'}: </span>
                           <a href={link.url} target='_blank' rel='noopener noreferrer' className='text-indigo-600 hover:underline break-all'>
@@ -269,7 +339,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
                       ))}
                     </div>
                   ) : (
-                    <p className='text-sm text-gray-500 mt-1'>No uploaded links yet.</p>
+                    <p className='text-sm text-gray-500 mt-1'>No uploaded links for selected platform yet.</p>
                   )}
                   <div className='grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3'>
                     <select
